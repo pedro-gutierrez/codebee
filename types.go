@@ -4,6 +4,7 @@
 package generator
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -31,21 +32,32 @@ func (e *Entity) VarName() string {
 	return strings.ToLower(e.Name)
 }
 
-// Relation represents a relation to a foreign entity. The Name
-// is the Golang struct that represents the database relation. Entity
-// is the foreign type we point to. And Prop is the field that
-// contains the ID of the foreign entity instance
+// Relation represents a relation to a foreign entity. The relation
+// can be aliased with a user defined name, otherwise the name of
+// the relation will be the target entity itself.
+//
+// The kind of the relation can be: has-one, has-many
 type Relation struct {
-	Name   string
+	Alias  string
 	Entity string
-	Prop   string
 	Kind   string
+}
+
+// has a name, then return it, otherwise use the Entity name as the name
+// of the relation
+func (r *Relation) Name() string {
+	if r.Alias != "" {
+		return r.Alias
+	} else {
+		return r.Entity
+	}
+
 }
 
 // VarName returns the variable name representation for the
 // relation
 func (r *Relation) VarName() string {
-	return strings.ToLower(r.Name)
+	return fmt.Sprintf("%sRel", strings.ToLower(r.Name()))
 }
 
 // Named is a generic interface to be implemented

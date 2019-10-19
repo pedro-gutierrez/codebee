@@ -7,15 +7,33 @@ func TestGenerateRepo(t *testing.T) {
 	// This is a test model. The goal is to parse the GraphQL schema,
 	// and translate it into this abstract model.
 	entities := []*Entity{
-		&Entity{Name: "Organization"},
+		&Entity{
+			Name: "Organization",
+			Relations: []*Relation{
+				&Relation{
+					Alias:  "Owner",
+					Entity: "User",
+					Kind:   "has-one",
+				},
+			},
+		},
+
 		&Entity{
 			Name: "User",
 			Relations: []*Relation{
 				&Relation{
-					Name:   "UserOrganization",
 					Entity: "Organization",
-					Prop:   "Org",
-					Kind:   "many-to-one",
+					Kind:   "has-one",
+				},
+			},
+		},
+		&Entity{
+			Name: "Poi",
+			Relations: []*Relation{
+				&Relation{
+					Alias:  "Owner",
+					Entity: "User",
+					Kind:   "has-one",
 				},
 			},
 		},

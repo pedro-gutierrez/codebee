@@ -42,7 +42,8 @@ func AddRepoFuns(entities []*Entity, f *File) {
 func CreateEntityInDbFun(e *Entity, f *File) {
 	funName := fmt.Sprintf("Create%sInDb", e.Name)
 
-	f.Comment(fmt.Sprintf("%s persists an entity of type %s to the database, as well as its relations to other linked entities", funName, e.Name))
+	f.Comment(fmt.Sprintf("%s persists an entity of type %s to the database", funName, e.Name))
+	f.Comment("This function also persists its relations to other linked entities")
 	f.Func().Id(funName).Params(Id("db").Op("*").Id("DB"), Id(e.VarName()).Op("*").Id(e.Name)).Error().BlockFunc(func(g *Group) {
 		PersistEntityFunBody(g, e)
 	})
@@ -64,8 +65,9 @@ func PersistEntityFunBody(g *Group, e *Entity) {
 	for _, r := range e.Relations {
 
 		// Persist many to one relations
-		if "many-to-one" == r.Kind {
-			g.Comment(fmt.Sprintf("entities of type %s need a %s. Make sure they are linked them propertly inside this transaction", e.Name, r.Entity))
+		if "has-one" == r.Kind {
+			g.Comment(fmt.Sprintf("Entities of type %s need a %s as their %s", e.Name, r.Entity, r.Name()))
+			g.Comment("Make sure they are linked propertly inside this transaction")
 			RelationStruct(g, e, r)
 			CreateOrRollbackExpression(g, r)
 		}
@@ -78,8 +80,9 @@ func PersistEntityFunBody(g *Group, e *Entity) {
 // RelationStruct is a helper function that generates the Golang
 // struct that represents a relation to be persisted in the database.
 func RelationStruct(g *Group, e *Entity, r *Relation) {
-	g.Id(r.VarName()).Op(":=").Op("&").Id(r.Name).Values(Dict{
-		Id(fmt.Sprintf(r.Entity)): Id(e.VarName()).Dot(r.Prop),
+	relType := fmt.Sprintf("%s%s", e.Name, r.Entity)
+	g.Id(r.VarName()).Op(":=").Op("&").Id(relType).Values(Dict{
+		Id(fmt.Sprintf(r.Entity)): Id(e.VarName()).Dot(r.Name()),
 		Id(fmt.Sprintf(e.Name)):   Id(e.VarName()).Dot("ID"),
 	})
 }
