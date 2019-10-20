@@ -4,15 +4,15 @@ The goal of this proyect is to provide with a custom code generator so that we c
 
 * Define our business model in an abstract way (YAML)
 * Generate a GraphQL schema out of it, and then use it in a gqlgen proyect.
+* Genereate resolvers for gqlgen.
 * Generate the flootic repo layer out of it.
 * Generate the SQL schema for various platforms (Cockroach, Sqlite, etc...)
 * Generate seed data for the database
 * Generate the model as Golang structs
-* Generate basic GraphQL resolver code.
 * Implement our code style conventions.
 * Instrument code
 
-This will save us a lot of time in maintenance and will dramatically increase consistency. 
+This will save us a lot of time in maintenance and will dramatically increase consistency. We will be able to have our very own FaunaDB clone running in premises with the right features we want (sorting, pagination, referential integrity).
 
 # Flootic model
 
