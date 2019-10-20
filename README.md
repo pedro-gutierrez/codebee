@@ -12,7 +12,9 @@ The goal of this proyect is to provide with a custom code generator so that we c
 * Implement our code style conventions.
 * Instrument code
 
-This will save us a lot of time in maintenance and will dramatically increase consistency. We will be able to have our very own FaunaDB clone running in premises with the right features we want (sorting, pagination, referential integrity).
+This will save us a lot of time in maintenance and will dramatically increase consistency. We won't need to write a lot of boilerplate code, and the whole system will be a lot more DRY. 
+
+We will be able to have our very own FaunaDB clone running in premises with the right features we want (sorting, pagination, referential integrity).
 
 # Flootic model
 
