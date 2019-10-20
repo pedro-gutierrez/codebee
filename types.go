@@ -81,56 +81,65 @@ func (e *Entity) ImplementTraits() {
 	for _, t := range e.Traits {
 		switch t {
 		case "id":
-			e.Attribute("ID").WithType("ID").WithModifiers([]string{
+			e.AddAttribute("ID", "ID", []string{
 				"required",
 				"unique",
 				"indexed",
 			})
 
 		case "keys":
-			e.Attribute("ID").WithType("ID").WithModifiers([]string{
+			e.AddAttribute("ID", "ID", []string{
 				"required",
 				"unique",
 				"indexed",
 			})
-
-			e.Attribute("Name").WithType("String").WithModifiers([]string{
+			e.AddAttribute("Name", "String", []string{
 				"required",
 				"unique",
 				"indexed",
 			})
 
 		case "timestamps":
-			e.Attribute("CreatedAt").WithType("Time").WithModifiers([]string{
+			e.AddAttribute("CreatedAt", "Time", []string{
 				"required",
 				"generated",
 			})
-			e.Attribute("UpdatedAt").WithType("Time").WithModifiers([]string{
+			e.AddAttribute("UpdatedAt", "Time", []string{
 				"required",
 				"generated",
 			})
 
 		case "authors":
-			e.AliasedRelation("CreatedBy").WithEntity("User").WithModifiers([]string{
+			e.AddRelation("CreatedBy", "User", []string{
 				"required",
 				"hasOne",
 				"generated",
 			})
-
-			e.AliasedRelation("UpdatedBy").WithEntity("User").WithModifiers([]string{
+			e.AddRelation("UpdatedBy", "User", []string{
 				"required",
 				"hasOne",
 				"generated",
 			})
 
 		case "owner":
-			e.AliasedRelation("Owner").WithEntity("User").WithModifiers([]string{
+			e.AddRelation("Owner", "User", []string{
 				"required",
 				"hasOne",
 			})
-
 		}
 	}
+}
+
+// AddAttribute is a convenience function that adds a new attribute to
+// the given entity
+func (e *Entity) AddAttribute(n string, t string, m []string) {
+	e.Attribute(n).WithType(t).WithModifiers(m)
+}
+
+// AddAttribute is a convenience function that adds an aliased relation
+// to the given entity
+func (e *Entity) AddRelation(a string, entity string, m []string) {
+	e.AliasedRelation(a).WithEntity(entity).WithModifiers(m)
 }
 
 // Adds a new attribute with the given name to the entity

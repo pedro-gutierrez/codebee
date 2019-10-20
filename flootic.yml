@@ -2,8 +2,6 @@ entities:
   - name: Organization
     traits:
       - keys
-      - timestamps
-      - authors
       - owner
   - name: User
     attributes:
@@ -22,6 +20,4 @@ entities:
   - name: Poi
     traits:
       - keys
-      - timestamps
-      - authors
       - owner
