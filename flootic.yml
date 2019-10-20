@@ -1,0 +1,27 @@
+entities:
+  - name: Organization
+    traits:
+      - keys
+      - timestamps
+      - authors
+      - owner
+  - name: User
+    attributes:
+      - name: Email
+        type: String
+        modifiers:
+          - unique
+          - required
+          - indexed
+    relations:
+      - entity: Organization
+        modifiers:
+          - belongsTo
+    traits:
+      - id
+  - name: Poi
+    traits:
+      - keys
+      - timestamps
+      - authors
+      - owner

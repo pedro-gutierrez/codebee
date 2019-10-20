@@ -18,7 +18,7 @@ func CreateRepo(p *Package) error {
 	f.PackageComment("This file contains all the functions that implement the Database repository")
 	f.PackageComment(" ** THIS CODE IS MACHINE GENERATED. DO NOT EDIT MANUALLY ** ")
 
-	for _, e := range p.Entities {
+	for _, e := range p.Model.Entities {
 		CreateEntityInDbFun(e, f)
 	}
 
@@ -64,8 +64,8 @@ func PersistEntityFunBody(g *Group, e *Entity) {
 	// If this entity has relations to other entities
 	for _, r := range e.Relations {
 
-		// Persist many to one relations
-		if "has-one" == r.Kind {
+		// Persist belongsTo relations
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
 			g.Comment(fmt.Sprintf("Entities of type %s need a %s as their %s", e.Name, r.Entity, r.Name()))
 			g.Comment("Make sure they are linked propertly inside this transaction")
 			RelationStruct(g, e, r)
