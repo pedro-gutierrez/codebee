@@ -31,7 +31,22 @@ func AddGraphqlFun(f *File) {
 		Qual("github.com/graphql-go/graphql", "Schema"),
 		Error(),
 	)).BlockFunc(func(g *Group) {
-		g.Var().Id("schema").Id("graphql").Dot("Schema")
-		g.Return(List(Id("schema"), Nil()))
+
+		g.Return(Id("graphql").Dot("NewSchema").Call(
+			Id("graphql").Dot("SchemaConfig").Values(Dict{
+				Id("Query"): Id("graphql").Dot("NewObject").Call(
+					Id("graphql").Dot("ObjectConfig").Values(Dict{
+						Id("Name"):   Lit("RootQuery"),
+						Id("Fields"): Op("[]").Id("graphql").Dot("Fields").Values(),
+					}),
+				),
+				Id("Mutation"): Id("graphql").Dot("NewObject").Call(
+					Id("graphql").Dot("ObjectConfig").Values(Dict{
+						Id("Name"):   Lit("Mutation"),
+						Id("Fields"): Op("[]").Id("graphql").Dot("Fields").Values(),
+					}),
+				),
+			}),
+		))
 	})
 }

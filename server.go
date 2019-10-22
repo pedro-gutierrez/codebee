@@ -37,9 +37,6 @@ func AddSetupServerFun(f *File) {
 			Id("Playground"): Id("true"),
 		}))
 
-		g.Id("static").Op(":=").Qual("net/http", "FileServer").Call(Id("http").Dot("Dir").Call(Lit("static")))
-
-		g.Id("http").Dot("Handle").Call(Lit("/"), Id("static"))
-		g.Id("http").Dot("Handle").Call(Lit("/graphql"), Id("h"))
+		g.Qual("net/http", "Handle").Call(Lit("/"), Id("h"))
 	})
 }
