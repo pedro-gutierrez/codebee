@@ -28,6 +28,8 @@ The suggested reference at the moment is `flootic.yml`.
 | --------------- |:-------------:|
 | Repo            | in progress   |
 | GraphQL schema  | in progress   |
+| Model           | in progress   |
+| SQL schema      | in progress   |
 
 # Example
 
