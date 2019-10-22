@@ -58,10 +58,8 @@ func ReadFile(g *Group) {
 func AddRepoFuns(entities []*Entity, f *File) {
 	for _, e := range entities {
 
-		// Add functions to insert data
 		AddInsertFun(e, f)
-
-		// TODO: add code to find, update and delete data
+		AddFindFuns(e, f)
 	}
 }
 
@@ -79,7 +77,7 @@ func AddInsertFun(e *Entity, f *File) {
 		IfErrorReturn(g)
 
 		DeferRollbackTransaction(g)
-		PrepareStatement(InsertStatement(e), g)
+		PrepareTransactionStatement(InsertStatement(e), g)
 		IfErrorReturn(g)
 
 		DeferCloseStatement(g)
@@ -90,6 +88,34 @@ func AddInsertFun(e *Entity, f *File) {
 		IfErrorReturn(g)
 
 		ReturnCommitTransaction(g)
+	})
+}
+
+// AddFindFuns produces functions that perform lookups by key on the
+// given entity
+func AddFindFuns(e *Entity, f *File) {
+	for _, a := range e.Attributes {
+		if a.HasModifier("unique") && a.HasModifier("indexed") {
+			AddFindFun(e, a, f)
+		}
+	}
+}
+
+// AddFindFun produces a finder function for the given entity and
+// attribute
+func AddFindFun(e *Entity, a *Attribute, f *File) {
+	funName := fmt.Sprintf("Find%sBy%s", e.Name, a.Name)
+	f.Comment(fmt.Sprintf("%s finds an instance of type %s by %s. If no row matches, then this function returns an error", funName, e.Name, a.Name))
+	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), TypedFromAttribute(Id("v"), a)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
+
+		VarForEntity(e, g)
+		PrepareDbStatement(SelectByColumnStatement(e, a), g)
+		IfErrorReturnWithEntity(e, g)
+		DeferCloseStatement(g)
+		VarNamesForEntity(e, g)
+		ScanRow(e, g)
+		IfErrorReturnWithEntity(e, g)
+		ReturnRow(e, g)
 	})
 }
 
@@ -161,15 +187,118 @@ func InsertStatementValues(e *Entity, g *Group) {
 	}
 }
 
+// SelectByColumnStatement generates a SELECT statement that performs a
+// query for an entity by a single column
+func SelectByColumnStatement(e *Entity, a *Attribute) string {
+	chunks := []string{}
+	chunks = append(chunks, "SELECT")
+
+	columns := []string{}
+	for _, a := range e.Attributes {
+		columns = append(columns, AttributeColumnName(a))
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+			columns = append(columns, RelationColumnName(r))
+		}
+	}
+
+	chunks = append(chunks, strings.Join(columns, ","))
+	chunks = append(chunks, "FROM")
+	chunks = append(chunks, TableName(e))
+	chunks = append(chunks, "WHERE")
+	chunks = append(chunks, AttributeColumnName(a))
+	chunks = append(chunks, "=")
+	chunks = append(chunks, "?")
+	return strings.Join(chunks, " ")
+}
+
+// VarNameForEntity produces a variable for the entity.
+func VarForEntity(e *Entity, g *Group) {
+	g.Var().Id(e.VarName()).Id(e.Name)
+}
+
+// VarNamesForEntity produces a variable for each attribute and relation
+// in the given entity. This is used when scanning rows returned from
+// the database
+func VarNamesForEntity(e *Entity, g *Group) {
+
+	// use the Golang type for the attribute
+	for _, a := range e.Attributes {
+		TypedFromAttribute(g.Var().Id(a.VarName()), a)
+	}
+
+	// IDs to other tables are modelled as strings
+	for _, r := range e.Relations {
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+			TypedFromDataType(g.Var().Id(r.VarName()), "string")
+		}
+	}
+}
+
+// ScanRow produces the code required to scan a database row for the
+// given entity
+func ScanRow(e *Entity, g *Group) {
+	g.Err().Op("=").Id("stmt").Dot("QueryRow").Call(Id("v")).Dot("Scan").Call(ListFunc(func(g *Group) {
+		// use the Golang type for the attribute
+		for _, a := range e.Attributes {
+			g.Op("&").Id(a.VarName())
+		}
+
+		// IDs to other tables are modelled as strings
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+				g.Op("&").Id(r.VarName())
+			}
+		}
+	}))
+}
+
+// ReturnRow produces the code required to return an entity populated
+// from scanned variables, and a nil error
+func ReturnRow(e *Entity, g *Group) {
+	g.Return().List(Op("&").Id(e.Name).Values(DictFunc(func(d Dict) {
+
+		for _, a := range e.Attributes {
+			d[Id(a.Name)] = Id(a.VarName())
+		}
+
+		// For each relation, wrap the id in an struct of the appropiate
+		// tyoe
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+
+				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+					Id("ID"): Id(r.VarName()),
+				})
+			}
+		}
+
+	})), Nil())
+}
+
 // BeginTransaction is a helper function that generates the code needed
 // to start a new transaction
 func BeginTransaction(g *Group) {
 	g.List(Id("tx"), Err()).Op(":=").Id("db").Dot("Begin").Call()
 }
 
+// PrepareTransactionStatement produces the code required to create a new
+// statement from a transaction
+func PrepareTransactionStatement(sql string, g *Group) {
+	PrepareStatement("tx", sql, g)
+}
+
+// PrepareDbStatement produces the code required to create a new
+// statement from a database
+func PrepareDbStatement(sql string, g *Group) {
+	PrepareStatement("db", sql, g)
+}
+
 // PrepareStatement produces the code required to create a new statement
-func PrepareStatement(sql string, g *Group) {
-	g.List(Id("stmt"), Err()).Op(":=").Id("tx").Dot("Prepare").Call(Lit(sql))
+func PrepareStatement(receiver string, sql string, g *Group) {
+	g.List(Id("stmt"), Err()).Op(":=").Id(receiver).Dot("Prepare").Call(Lit(sql))
 }
 
 // ExecuteStatement produces the code required to execute a statement.
@@ -209,4 +338,11 @@ func DeferCall(id string, fun string, g *Group) {
 // returns immediately
 func IfErrorReturn(g *Group) {
 	g.If(Err().Op("!=").Nil()).Block(Return(Err()))
+}
+
+// IfErrorReturnWithEntity is a helper function that checks the err variable and
+// returns immediately a tuple with a variable for the entity, and the
+// error
+func IfErrorReturnWithEntity(e *Entity, g *Group) {
+	g.If(Err().Op("!=").Nil()).Block(Return(List(Op("&").Id(e.VarName()), Err())))
 }

@@ -198,6 +198,22 @@ func (a *Attribute) WithModifiers(mods []string) *Attribute {
 	return a
 }
 
+// HasModifier returns true, if the attribute has the given modifier
+func (a *Attribute) HasModifier(m string) bool {
+	for _, mod := range a.Modifiers {
+		if m == mod {
+			return true
+		}
+	}
+
+	return false
+}
+
+// VarName returns a variable name representation for the attribute
+func (a *Attribute) VarName() string {
+	return strings.ToLower(a.Name)
+}
+
 // Relation represents a relation to a foreign entity.
 //
 // The relation can be aliased with a user defined name,

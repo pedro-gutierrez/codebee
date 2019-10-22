@@ -38,21 +38,7 @@ func AddModelStruct(f *File, e *Entity) {
 
 		// Add a struct field for each entity attribute
 		for _, a := range e.Attributes {
-			field := g.Id(a.Name)
-			switch attributeDatatype(a) {
-			case "int":
-				field.Int()
-
-			case "float":
-				field.Float64()
-
-			case "boolean":
-				field.Bool()
-
-			default:
-				field.String()
-
-			}
+			TypedFromAttribute(g.Id(a.Name), a)
 		}
 
 		// Add a struct field for each relation. We we built a pointer
@@ -61,6 +47,31 @@ func AddModelStruct(f *File, e *Entity) {
 			g.Id(r.Name()).Op("*").Id(r.Entity)
 		}
 	})
+}
+
+// TypedFromAttribute appends the appropiate Golang type to the given
+// statement, according to the type of the given attribute
+func TypedFromAttribute(s *Statement, a *Attribute) *Statement {
+	return TypedFromDataType(s, attributeDatatype(a))
+}
+
+// TypedFromDataType appends the appropiate Golang type to the given
+// statement, according to the type of the given data type
+func TypedFromDataType(s *Statement, dataType string) *Statement {
+	switch dataType {
+	case "int":
+		return s.Int()
+
+	case "float":
+		return s.Float64()
+
+	case "boolean":
+		return s.Bool()
+
+	default:
+		return s.String()
+
+	}
 }
 
 // attributeDatatype normalizes the attribute datatype so that we can

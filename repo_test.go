@@ -16,6 +16,7 @@ func TestGenerateRepo(t *testing.T) {
 	model, err := ReadModelFromFile("flootic.yml")
 	if err != nil {
 		t.Errorf("Error reading model from yaml: %v", err)
+		t.FailNow()
 	}
 
 	// Generate model code
@@ -27,6 +28,7 @@ func TestGenerateRepo(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Error creating model: %v", err)
+		t.FailNow()
 	}
 
 	// Generate repository code
@@ -38,6 +40,7 @@ func TestGenerateRepo(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Error creating repo: %v", err)
+		t.FailNow()
 	}
 
 	// Generate GraphQL schema
@@ -49,6 +52,7 @@ func TestGenerateRepo(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Error creating GraphQL schema: %v", err)
+		t.FailNow()
 	}
 
 	// Generate SQL schema
@@ -60,14 +64,16 @@ func TestGenerateRepo(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("Error creating SQL schema: %v", err)
+		t.FailNow()
 	}
 
-	// Start an empty database. For our tests, we use in memory Sqlite
-	// so we know the database is totally empty and we need to build it
-	// from scratch
-	db, err := sql.Open("sqlite3", "file::memory:?cache=shared")
+	//dbString := "./flootic.db"
+	dbString := "file::memory:?cache=shared"
+
+	db, err := sql.Open("sqlite3", dbString)
 	if err != nil {
 		t.Errorf("Unable to open database: %v", err)
+		t.FailNow()
 	}
 
 	log.Printf(fmt.Sprintf("%v", db))
@@ -75,6 +81,7 @@ func TestGenerateRepo(t *testing.T) {
 	err = flootic.RunDBScript(db, "./generated/flootic.sql")
 	if err != nil {
 		t.Errorf("Unable to iniatialize database: %v", err)
+		t.FailNow()
 	}
 
 	// Test the generated model and repo
@@ -94,6 +101,42 @@ func TestGenerateRepo(t *testing.T) {
 	err = flootic.InsertOrganization(db, org)
 	if err != nil {
 		t.Errorf("Error inserting organization: %v", err)
+		t.FailNow()
+	}
+
+	err = flootic.InsertUser(db, user)
+	if err != nil {
+		t.Errorf("Error inserting user: %v", err)
+		t.FailNow()
+	}
+
+	userFromDb, err := flootic.FindUserByID(db, "1")
+	if err != nil {
+		t.Errorf("Error in user lookup by ID: %v", err)
+		t.FailNow()
+	}
+
+	if userFromDb.Email != user.Email {
+		t.Errorf("Email mismatch %v (memory) vs %v (db)", user.Email, userFromDb.Email)
+		t.FailNow()
+	}
+
+	userFromDb, err = flootic.FindUserByEmail(db, "admin@flootic.com")
+	if err != nil {
+		t.Errorf("Error in user lookup by ID: %v", err)
+		t.FailNow()
+	}
+
+	if userFromDb.Email != user.Email {
+		t.Errorf("Email mismatch %v (memory) vs %v (db)", user.Email, userFromDb.Email)
+		t.FailNow()
+	}
+
+	userFromDb, err = flootic.FindUserByID(db, "2")
+	expectedError := "sql: no rows in result set"
+	if err == nil || err.Error() != expectedError {
+		t.Errorf("Expected error %v, got: %v", expectedError, err)
+		t.FailNow()
 	}
 
 }
