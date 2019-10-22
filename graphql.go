@@ -1,31 +1,37 @@
 // This file contains all the generator functions that we need in order
-// to build the Flootic GraphQL schema and resolvers.
+// to build the Flootic GraphQL schema.
 package generator
 
 import (
-	. "github.com/flootic/generator/graphql"
+	"fmt"
+	. "github.com/dave/jennifer/jen"
 )
 
-// CreateGraphqlSchema creates a new GraphQL schema from the given
-// package. The schema is then saved to disk.
-func CreateGraphqlSchema(p *Package) error {
-	f := NewFile()
+// CreateGraphql generates a Golang file that produces the Graphql
+// schema.
+func CreateGraphql(p *Package) error {
+	f := NewFile(p.Name)
 
-	for _, e := range p.Model.Entities {
-		CreateType(e, f)
-	}
+	f.PackageComment(fmt.Sprintf("%s contains all the library code for the Flootic platform", p.Name))
+	f.PackageComment("This file contains all the functions that implement the Graphql schema")
+	f.PackageComment(" ** THIS CODE IS MACHINE GENERATED. DO NOT EDIT MANUALLY ** ")
+
+	AddGraphqlFun(f)
 
 	return f.Save(p.Filename)
 }
 
-// CreateType adds a new object type for the given entity to the schema.
-func CreateType(e *Entity, f *File) {
-	f.Type(e.Name, func(t *Type) {
-		for _, a := range e.Attributes {
-			t.Field(a.Name).Type(a.Type)
-		}
-		for _, r := range e.Relations {
-			t.Field(r.Name()).Type(r.Entity)
-		}
+// AddGraphqlFun generates a convenience function that accepts the
+// path to a SQL file, and runs all statements in that file one by one
+func AddGraphqlFun(f *File) {
+	funName := "Graphql"
+
+	f.Comment(fmt.Sprintf("%s returns the Graphql schema", funName))
+	f.Func().Id(funName).Params().Parens(List(
+		Qual("github.com/graphql-go/graphql", "Schema"),
+		Error(),
+	)).BlockFunc(func(g *Group) {
+		g.Var().Id("schema").Id("graphql").Dot("Schema")
+		g.Return(List(Id("schema"), Nil()))
 	})
 }

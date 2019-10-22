@@ -6,6 +6,7 @@ import (
 	"github.com/flootic/generator/generated"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
+	"net/http"
 	"testing"
 )
 
@@ -44,9 +45,9 @@ func TestGenerateRepo(t *testing.T) {
 	}
 
 	// Generate GraphQL schema
-	err = CreateGraphqlSchema(&Package{
+	err = CreateGraphql(&Package{
 		Name:     "flootic",
-		Filename: "./generated/flootic.graphql",
+		Filename: "./generated/graphql.go",
 		Model:    model,
 	})
 
@@ -58,7 +59,7 @@ func TestGenerateRepo(t *testing.T) {
 	// Generate SQL schema
 	err = CreateSQLSchema(&Package{
 		Name:     "flootic",
-		Filename: "./generated/flootic.sql",
+		Filename: "./generated/schema.sql",
 		Model:    model,
 	})
 
@@ -67,7 +68,6 @@ func TestGenerateRepo(t *testing.T) {
 		t.FailNow()
 	}
 
-	//dbString := "./flootic.db"
 	dbString := "file::memory:?cache=shared"
 
 	db, err := sql.Open("sqlite3", dbString)
@@ -78,7 +78,7 @@ func TestGenerateRepo(t *testing.T) {
 
 	log.Printf(fmt.Sprintf("%v", db))
 
-	err = flootic.RunDBScript(db, "./generated/flootic.sql")
+	err = flootic.RunDBScript(db, "./generated/schema.sql")
 	if err != nil {
 		t.Errorf("Unable to iniatialize database: %v", err)
 		t.FailNow()
@@ -138,5 +138,30 @@ func TestGenerateRepo(t *testing.T) {
 		t.Errorf("Expected error %v, got: %v", expectedError, err)
 		t.FailNow()
 	}
+
+	// Generate server code
+	err = CreateServer(&Package{
+		Name:     "flootic",
+		Filename: "./generated/server.go",
+		Model:    model,
+	})
+
+	if err != nil {
+		t.Errorf("Error creating server: %v", err)
+		t.FailNow()
+	}
+
+	// Generate a new GraphQL schema
+	schema, err := flootic.Graphql()
+	if err != nil {
+		t.Errorf("Error creating GraphQL schema: %v", err)
+		t.FailNow()
+	}
+
+	log.Printf(fmt.Sprintf("%v", schema))
+
+	// Start a new server with the database and schema
+	flootic.SetupServer(db, schema)
+	log.Fatal(http.ListenAndServe(":2999", nil))
 
 }

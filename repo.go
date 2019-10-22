@@ -340,6 +340,12 @@ func IfErrorReturn(g *Group) {
 	g.If(Err().Op("!=").Nil()).Block(Return(Err()))
 }
 
+// Return nil is a helper function that unconditonally returns
+// nil
+func ReturnNil(g *Group) {
+	g.Return(Nil())
+}
+
 // IfErrorReturnWithEntity is a helper function that checks the err variable and
 // returns immediately a tuple with a variable for the entity, and the
 // error
