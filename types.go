@@ -5,6 +5,7 @@ package generator
 
 import (
 	"fmt"
+	. "github.com/dave/jennifer/jen"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"strings"
@@ -170,6 +171,24 @@ func (e *Entity) Relation(name string) *Relation {
 
 	e.Relations = append(e.Relations, r)
 	return r
+}
+
+// EntityInitialization builds the initialization of a new entity struct
+// pointer for the given entity
+func EntityInitialization(e *Entity) *Statement {
+	return Op("&").Id(e.Name).Values(DictFunc(func(d Dict) {
+		for _, a := range e.Attributes {
+			d[Id(a.Name)] = Id(a.VarName())
+		}
+
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+					Id("ID"): Id(r.VarName()),
+				})
+			}
+		}
+	}))
 }
 
 // Attribute represents a simple entity field. A field has a data type

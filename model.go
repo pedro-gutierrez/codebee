@@ -52,30 +52,57 @@ func AddModelStruct(f *File, e *Entity) {
 // TypedFromAttribute appends the appropiate Golang type to the given
 // statement, according to the type of the given attribute
 func TypedFromAttribute(s *Statement, a *Attribute) *Statement {
-	return TypedFromDataType(s, attributeDatatype(a))
+	return TypedFromDataType(s, AttributeDatatype(a))
 }
 
 // TypedFromDataType appends the appropiate Golang type to the given
 // statement, according to the type of the given data type
 func TypedFromDataType(s *Statement, dataType string) *Statement {
+	return s.Add(TypeFromDataType(dataType))
+
+}
+
+// TypeFromAttribute returns the Golang type statement for the given
+// attribute
+func TypeFromAttribute(a *Attribute) *Statement {
+	return TypeFromDataType(AttributeDatatype(a))
+}
+
+// TypeFromDataType returns the Golang type statement for the given
+// data type string representation
+func TypeFromDataType(dataType string) *Statement {
+
 	switch dataType {
 	case "int":
-		return s.Int()
+		return Int()
 
 	case "float":
-		return s.Float64()
+		return Float64()
 
 	case "boolean":
-		return s.Bool()
+		return Bool()
 
 	default:
-		return s.String()
+		return String()
 
 	}
 }
 
-// attributeDatatype normalizes the attribute datatype so that we can
+// AttributeDatatype normalizes the attribute datatype so that we can
 // safely transform it into a Golang type
-func attributeDatatype(a *Attribute) string {
+func AttributeDatatype(a *Attribute) string {
 	return strings.ToLower(a.Type)
+}
+
+// TypeFromRelation returns the Golang type statement for the given
+// relation
+func TypeFromRelation(r *Relation) *Statement {
+	return TypeFromDataType(RelationDatatype(r))
+}
+
+// Relation normalizes the attribute datatype so that we can
+// safely transform it into a Golang type. A relation is an Id, which is
+// implemented as a string in Go.
+func RelationDatatype(r *Relation) string {
+	return "string"
 }

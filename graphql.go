@@ -28,7 +28,9 @@ func AddGraphqlFun(m *Model, f *File) {
 	funName := "Graphql"
 
 	f.Comment(fmt.Sprintf("%s returns the Graphql schema", funName))
-	f.Func().Id(funName).Params().Parens(List(
+	f.Func().Id(funName).Params(
+		Id("db").Op("*").Qual("database/sql", "DB"),
+	).Parens(List(
 		Qual("github.com/graphql-go/graphql", "Schema"),
 		Error(),
 	)).BlockFunc(func(g *Group) {
@@ -100,7 +102,11 @@ func GraphqlQueryFields(m *Model) func(Dict) {
 							d[Lit(GraphqlAttributeName(a))] = GraphqlAttributeArgument(a)
 						},
 						func(g *Group) {
-							g.Return(List(Nil(), Nil()))
+
+							GraphqlAttributeValidation(a, g)
+
+							g.Return(Id(
+								FindEntityByAttributeFunName(e, a)).Call(Id("db"), Id(a.VarName())))
 						})
 				}
 			}
@@ -133,7 +139,19 @@ func GraphqlMutationFields(m *Model) func(Dict) {
 
 				},
 				func(g *Group) {
-					g.Return(List(Nil(), Nil()))
+					// add code to validate fields
+					for _, a := range e.Attributes {
+						GraphqlAttributeValidation(a, g)
+					}
+
+					for _, r := range e.Relations {
+						GraphqlRelationValidation(r, g)
+					}
+
+					g.Return(Id(InsertEntityFunName(e)).Call(
+						Id("db"),
+						EntityInitialization(e),
+					))
 				})
 		}
 	}
@@ -214,4 +232,26 @@ func GraphqlRelationArgument(r *Relation) *Statement {
 // whether or not the attribute might be nullable or not
 func GraphqlRelationType(r *Relation) *Statement {
 	return Id("graphql").Dot("NewNonNull").Call(Id("graphql").Dot("ID"))
+}
+
+// GraphqlAttributeValidation adds the necessary code to validate a
+// query or mutation argument for the given attribute.
+func GraphqlAttributeValidation(a *Attribute, g *Group) {
+
+	g.List(Id(a.VarName()), Id("ok")).Op(":=").Id("p").Dot("Args").Index(Lit(GraphqlAttributeName(a))).Assert(TypeFromAttribute(a))
+	g.If(Op("!").Id("ok")).Block(
+		Return(Nil(), Qual("errors", "New").Call(Lit(fmt.Sprintf("Invalid or missing %s argument", GraphqlAttributeName(a))))),
+	)
+
+}
+
+// GraphqlRelationValidation adds the necessary code to validate a
+// query or mutation argument for the given relation.
+func GraphqlRelationValidation(r *Relation, g *Group) {
+
+	g.List(Id(r.VarName()), Id("ok")).Op(":=").Id("p").Dot("Args").Index(Lit(GraphqlRelationName(r))).Assert(TypeFromRelation(r))
+
+	g.If(Op("!").Id("ok")).Block(
+		Return(Nil(), Qual("errors", "New").Call(Lit(fmt.Sprintf("Invalid or missing %s argument", GraphqlRelationName(r))))),
+	)
 }

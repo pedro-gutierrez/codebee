@@ -98,13 +98,13 @@ func TestGenerateRepo(t *testing.T) {
 	org.Owner = user
 	user.Organization = org
 
-	err = flootic.InsertOrganization(db, org)
+	_, err = flootic.InsertOrganization(db, org)
 	if err != nil {
 		t.Errorf("Error inserting organization: %v", err)
 		t.FailNow()
 	}
 
-	err = flootic.InsertUser(db, user)
+	_, err = flootic.InsertUser(db, user)
 	if err != nil {
 		t.Errorf("Error inserting user: %v", err)
 		t.FailNow()
@@ -151,8 +151,8 @@ func TestGenerateRepo(t *testing.T) {
 		t.FailNow()
 	}
 
-	// Generate a new GraphQL schema
-	schema, err := flootic.Graphql()
+	//Generate a new GraphQL schema
+	schema, err := flootic.Graphql(db)
 	if err != nil {
 		t.Errorf("Error creating GraphQL schema: %v", err)
 		t.FailNow()
@@ -161,7 +161,7 @@ func TestGenerateRepo(t *testing.T) {
 	log.Printf(fmt.Sprintf("%v", schema))
 
 	// Start a new server with the database and schema
-	flootic.SetupServer(db, schema)
+	flootic.SetupServer(schema)
 	log.Fatal(http.ListenAndServe(":2999", nil))
 
 }

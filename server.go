@@ -23,7 +23,6 @@ func AddSetupServerFun(f *File) {
 
 	f.Comment(fmt.Sprintf("%s configures the http server", funName))
 	f.Func().Id(funName).Params(
-		Id("db").Op("*").Qual("database/sql", "DB"),
 		Id("schema").Qual("github.com/graphql-go/graphql", "Schema"),
 	).BlockFunc(func(g *Group) {
 

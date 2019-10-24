@@ -63,31 +63,39 @@ func AddRepoFuns(entities []*Entity, f *File) {
 	}
 }
 
+// InsertEntityFunName returns the name of the insert function for the
+// entity
+func InsertEntityFunName(e *Entity) string {
+	return fmt.Sprintf("Insert%s", e.Name)
+}
+
 // AddInsertFun produces the function that inserts the given
 // entity to the database.
 func AddInsertFun(e *Entity, f *File) {
-	funName := fmt.Sprintf("Insert%s", e.Name)
+	funName := InsertEntityFunName(e)
 
 	f.Comment(fmt.Sprintf("%s inserts an entity of type %s to the database", funName, e.Name))
 	f.Comment("This function also persists its relations to other linked entities")
-	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), Id(e.VarName()).Op("*").Id(e.Name)).Error().BlockFunc(func(g *Group) {
+	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), Id(e.VarName()).Op("*").Id(e.Name)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
 
 		// Open a transaction
 		BeginTransaction(g)
-		IfErrorReturn(g)
+		IfErrorReturnEntityAndError(e, g)
 
 		DeferRollbackTransaction(g)
 		PrepareTransactionStatement(InsertStatement(e), g)
-		IfErrorReturn(g)
+		IfErrorReturnEntityAndError(e, g)
 
 		DeferCloseStatement(g)
 
 		ExecuteStatement(g, func(g2 *Group) {
 			InsertStatementValues(e, g2)
 		})
-		IfErrorReturn(g)
+		IfErrorReturnEntityAndError(e, g)
 
-		ReturnCommitTransaction(g)
+		CommitTransaction(g)
+		IfErrorReturnEntityAndError(e, g)
+		ReturnEntityAndNil(e, g)
 	})
 }
 
@@ -101,10 +109,16 @@ func AddFindFuns(e *Entity, f *File) {
 	}
 }
 
+// FindEntityByAttributeFunName returns the name of the finder function for the given
+// entity and attribute
+func FindEntityByAttributeFunName(e *Entity, a *Attribute) string {
+	return fmt.Sprintf("Find%sBy%s", e.Name, a.Name)
+}
+
 // AddFindFun produces a finder function for the given entity and
 // attribute
 func AddFindFun(e *Entity, a *Attribute, f *File) {
-	funName := fmt.Sprintf("Find%sBy%s", e.Name, a.Name)
+	funName := FindEntityByAttributeFunName(e, a)
 	f.Comment(fmt.Sprintf("%s finds an instance of type %s by %s. If no row matches, then this function returns an error", funName, e.Name, a.Name))
 	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), TypedFromAttribute(Id("v"), a)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
 
@@ -279,7 +293,7 @@ func ReturnRow(e *Entity, g *Group) {
 }
 
 // BeginTransaction is a helper function that generates the code needed
-// to start a new transaction
+// to start a new transaction.
 func BeginTransaction(g *Group) {
 	g.List(Id("tx"), Err()).Op(":=").Id("db").Dot("Begin").Call()
 }
@@ -310,10 +324,30 @@ func ExecuteStatement(g *Group, argsFun func(g *Group)) {
 	})
 }
 
-// ReturnCommitTransaction is a helper function that generates the code
-// needed to commit the transaction and return its error
-func ReturnCommitTransaction(g *Group) {
-	g.Return(Id("tx").Dot("Commit").Call())
+// CommitTransaction is a helper function that generates the code
+// needed to commit the transaction and return it error
+func CommitTransaction(g *Group) {
+	g.Err().Op("=").Id("tx").Dot("Commit").Call()
+}
+
+// IfErrorReturnEntityAndError returns a final statement that returns the entity
+// instance and the an error
+func IfErrorReturnEntityAndError(e *Entity, g *Group) {
+	g.If(Err().Op("!=").Nil().BlockFunc(func(g2 *Group) {
+		ReturnEntityAndError(e, g2)
+	}))
+}
+
+// ReturnEntityAndError returns a final statement that returns the entity
+// instance and the an error
+func ReturnEntityAndError(e *Entity, g *Group) {
+	g.Return(List(Id(e.VarName()), Err()))
+}
+
+// ReturnEntityAndNil returns a final statement that returns an entity
+// instance and nil as an error
+func ReturnEntityAndNil(e *Entity, g *Group) {
+	g.Return(List(Id(e.VarName()), Nil()))
 }
 
 // DeferRollbackTransaction produces a default defer transaction
