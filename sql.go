@@ -1,6 +1,4 @@
-// This file contains all the generator functions that we need in order
-// to build the Flootic SQL schema
-package generator
+package main
 
 import (
 	. "github.com/flootic/generator/sql"

@@ -1,7 +1,4 @@
-// This file contains the abstract model the generator works with. This
-// model is useful to decouple the generator from whatever data
-// modelling source (eg. GraphQL)
-package generator
+package main
 
 import (
 	"fmt"
