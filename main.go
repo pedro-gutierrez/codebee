@@ -61,6 +61,16 @@ func main() {
 		log.Fatal(fmt.Sprintf("Error generating repo: %v", err))
 	}
 
+	err = CreateSql(&Package{
+		Name:     packageName,
+		Filename: path.Join(*output, "sql.go"),
+		Model:    model,
+	})
+
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Error generating sql: %v", err))
+	}
+
 	err = CreateSchema(&Package{
 		Name:     packageName,
 		Filename: path.Join(*output, "schema.go"),
@@ -117,14 +127,39 @@ func AddMainFun(f *File) {
 
 	f.Func().Id(funName).Params().BlockFunc(func(g *Group) {
 
-		g.Id("schema").Op(":=").Id("Schema").Call()
-		g.Id("resolver").Op(":=").Op("&").Id("Resolver").Values(Dict{})
+		g.List(
+			Id("db"),
+			Err(),
+		).Op(":=").Id("NewDb").Call()
+		IfErrorLogFatal("Error opening database: %v", g)
+
+		g.Err().Op("=").Id("ExecStatements").Call(
+			Id("db"),
+			Id("SqlSchema").Call(),
+		)
+
+		IfErrorLogFatal("Error initializing database: %v", g)
 
 		g.Id("SetupServer").Call(
-			Id("schema"),
-			Id("resolver"),
+			Id("Schema").Call(),
+			Op("&").Id("Resolver").Values(Dict{
+				Id("Db"): Id("db"),
+			}),
 		)
 
 		g.Qual("net/http", "ListenAndServe").Call(Lit(":8080"), Nil())
 	})
+}
+
+// IfErrorLogFatal is a helper function that checks for an error and
+// exits with a logged message
+func IfErrorLogFatal(msg string, g *Group) {
+	g.If(Err().Op("!=").Nil()).Block(
+		Qual("log", "Fatal").Call(
+			Qual("fmt", "Sprintf").Call(
+				Lit(msg),
+				Err(),
+			),
+		),
+	)
 }

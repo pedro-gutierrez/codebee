@@ -20,25 +20,24 @@ func CreateRepo(p *Package) error {
 	f.ImportAlias("database/sql", "sql")
 	f.ImportAlias("io/ioutil", "ioutil")
 
-	AddRunDBScriptFun(f)
+	AddExecStatementsFun(f)
 
 	AddRepoFuns(p.Model.Entities, f)
 
 	return f.Save(p.Filename)
 }
 
-// AddRunScriptFun generates a convenience function that accepts the
-// path to a SQL file, and runs all statements in that file one by one
-func AddRunDBScriptFun(f *File) {
-	funName := "RunDBScript"
+// AddExecStatementsFun generates a convenience function that accepts a
+// slice of sql statements, and runs them all, one by one
+func AddExecStatementsFun(f *File) {
+	funName := "ExecStatements"
 
-	f.Comment(fmt.Sprintf("%s runs all SQL statements found in the given file", funName))
-	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), Id("path").Id("string")).Error().BlockFunc(func(g *Group) {
-		ReadFile(g)
-		IfErrorReturn(g)
-		g.Id("stmts").Op(":=").Qual("strings", "Split").Call(Id("string").Call(Id("file")), Lit(";"))
+	f.Comment(fmt.Sprintf("%s runs all SQL statements in the given slice. No transaction is opened. This function is designed to run DLL such as DROP/CREATE table.", funName))
+	f.Func().Id(funName).Params(
+		Id("db").Op("*").Qual("database/sql", "DB"),
+		Id("stmts").Op("[]").Id("string")).Error().BlockFunc(func(g *Group) {
 		g.For(List(Id("_"), Id("stmt")).Op(":=").Id("range").Id("stmts")).BlockFunc(func(g2 *Group) {
-			g2.List(Id("_"), Err()).Op("=").Id("db").Dot("Exec").Call(Id("stmt"))
+			g2.List(Id("_"), Err()).Op(":=").Id("db").Dot("Exec").Call(Id("stmt"))
 			IfErrorReturn(g2)
 		})
 

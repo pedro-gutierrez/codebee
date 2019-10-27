@@ -44,6 +44,12 @@ func (m *Model) ImplementTraits() {
 	}
 }
 
+// VarName converts the given name, into a golang variable name. The
+// convention is to convert all to lowercase.
+func VarName(name string) string {
+	return strings.ToLower(name)
+}
+
 // Entity represents a persisted datatype, such as an Organization, a
 // User or a Poi. An entity has relations to other entities.
 //
@@ -70,7 +76,7 @@ type Entity struct {
 // VarName returns the variable name representation for the
 // relation
 func (e *Entity) VarName() string {
-	return strings.ToLower(e.Name)
+	return VarName(e.Name)
 }
 
 // ImplementTraits translates the entity traits into the appropriate

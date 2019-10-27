@@ -21,3 +21,14 @@ entities:
     traits:
       - keys
       - owner
+  - name: Brand
+    traits:
+      - keys
+  - name: Device
+    relations:
+      - entity: Brand
+        modifiers:
+          - belongsTo
+    traits:
+      - keys
+      - owner

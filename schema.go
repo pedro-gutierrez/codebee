@@ -108,6 +108,15 @@ func GraphqlFinderQueryFromAttribute(e *Entity, a *Attribute) *GraphqlFun {
 	return m
 }
 
+// GraphqlFinderQueryByID is a convenience function representation that
+// models a lookup of an entity by its id
+func GraphqlFinderQueryByID(e *Entity) *GraphqlFun {
+	return GraphqlFinderQueryFromAttribute(e, &Attribute{
+		Name: "ID",
+		Type: "ID",
+	})
+}
+
 // GraphqlSchema is an internal simplified Graphql model
 type GraphqlSchema struct {
 	Types     []*GraphqlType
