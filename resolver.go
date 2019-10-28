@@ -18,7 +18,13 @@ func CreateResolver(p *Package) error {
 
 		for _, a := range e.Attributes {
 			if a.HasModifier("indexed") && a.HasModifier("unique") {
-				AddFinderQueryResolverFun(e, a, f)
+				AddFinderByAttributeQueryResolverFun(e, a, f)
+			}
+		}
+
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+				AddFinderByRelationQueryResolverFun(e, r, f)
 			}
 		}
 	}
@@ -59,10 +65,6 @@ func AddAttributeResolver(e *Entity, a *Attribute, f *File) {
 		Id("ctx").Qual("context", "Context"),
 	).Add(returnType).BlockFunc(func(g *Group) {
 		value := Id("r").Dot("Data").Dot(a.Name)
-		if a.Name == "ID" {
-			value = Qual("github.com/graph-gophers/graphql-go", "ID").Call(value)
-		}
-
 		g.Return(value)
 	})
 }
@@ -119,17 +121,13 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 				// from the resolver args
 				for _, a := range e.Attributes {
 					value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
-					if a.Name == "ID" {
-						value = Id("string").Call(value)
-					}
-
 					d[Id(a.Name)] = value
 				}
 
 				for _, r := range e.Relations {
 					if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
 						d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
-							Id("ID"): Id("string").Call(Id("args").Dot(strings.Title(r.Name()))),
+							Id("ID"): Id("args").Dot(strings.Title(r.Name())),
 						})
 					}
 				}
@@ -147,18 +145,15 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 	}, f)
 }
 
-// AddFinderQueryResolverFun defines a resolver function for the given
+// AddFinderByAttributeQueryResolverFun defines a resolver function for the given
 // indexed and
 // unique attribute of the given entity
-func AddFinderQueryResolverFun(e *Entity, a *Attribute, f *File) {
+func AddFinderByAttributeQueryResolverFun(e *Entity, a *Attribute, f *File) {
 	fun := GraphqlFinderQueryFromAttribute(e, a)
 	res := GraphqlResolverResult(fun)
 
 	ResolverFun(fun, func(g *Group) {
 		value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
-		if a.Name == "ID" {
-			value = Id("string").Call(value)
-		}
 		g.List(
 			Id(e.VarName()),
 			Err(),
@@ -173,6 +168,48 @@ func AddFinderQueryResolverFun(e *Entity, a *Attribute, f *File) {
 				Id("Db"):   Id("r").Dot("Db"),
 				Id("Data"): Id(e.VarName()),
 			}),
+			Nil(),
+		)
+	}, f)
+}
+
+// AddFinderByRelationQueryResolverFun defines a resolver function for the given
+// relation.
+func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
+	fun := GraphqlFinderQueryFromRelation(e, r)
+	res := GraphqlResolverResult(fun)
+
+	ResolverFun(fun, func(g *Group) {
+		g.List(
+			Id(VarName(e.Plural())),
+			Err(),
+		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.Plural(), r.Name())).Call(
+			Id("r").Dot("Db"),
+			Id("args"),
+		)
+
+		MaybeReturnWrappedError(fmt.Sprintf("Error resolving %s by %s", e.Plural(), r.Name()), g)
+
+		g.Id("resolvers").Op(":=").Id(res).Values(Dict{})
+
+		g.For(
+			List(
+				Id("_"),
+				Id(e.VarName()),
+			).Op(":=").Range().Id(VarName(e.Plural())),
+		).BlockFunc(func(g2 *Group) {
+
+			g2.Id("resolvers").Op("=").Append(
+				Id("resolvers"),
+				Op("&").Id(GraphqlResolverForEntity(e)).Values(Dict{
+					Id("Db"):   Id("r").Dot("Db"),
+					Id("Data"): Id(e.VarName()),
+				}),
+			)
+		})
+
+		g.Return(
+			Op("&").Id("resolvers"),
 			Nil(),
 		)
 	}, f)
@@ -204,7 +241,11 @@ func GraphqlResolverForRelation(r *Relation) string {
 // GraphqlResolverResult builds the resolver type of the return type of
 // the given graphql function
 func GraphqlResolverResult(f *GraphqlFun) string {
-	return GraphqlResolverForType(f.Returns.DataType)
+	res := GraphqlResolverForType(f.Returns.DataType)
+	if f.Returns.Many {
+		res = fmt.Sprintf("[]*%s", res)
+	}
+	return res
 }
 
 // GraphqlResolverForType returns the resolver type for the given data
@@ -247,8 +288,16 @@ func GraphqlResolverDataTypeFromGraphqlField(a *GraphqlField) *Statement {
 func GraphqlResolverDataTypeFromDataType(d string) *Statement {
 	switch d {
 	case "ID":
-		return Qual("github.com/graph-gophers/graphql-go", "ID")
+		return String()
 
+	case "String":
+		return String()
+
+	case "Int":
+		return Int32()
+
+	case "Boolean":
+		return Bool()
 	default:
 		return String()
 

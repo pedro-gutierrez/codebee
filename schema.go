@@ -43,6 +43,11 @@ func BuildSchema(m *Model) string {
 				s.Queries = append(s.Queries, GraphqlFinderQueryFromAttribute(e, a))
 			}
 		}
+		for _, r := range e.Relations {
+			if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
+				s.Queries = append(s.Queries, GraphqlFinderQueryFromRelation(e, r))
+			}
+		}
 	}
 
 	return s.String()
@@ -84,7 +89,7 @@ func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 
 	for _, r := range e.Relations {
 		f := GraphqlFieldFromRelation(r)
-		f.DataType = "ID"
+		f.DataType = "String"
 
 		m.Args = append(m.Args, f)
 	}
@@ -108,12 +113,48 @@ func GraphqlFinderQueryFromAttribute(e *Entity, a *Attribute) *GraphqlFun {
 	return m
 }
 
+// GraphqlFinderQueryFromRelation returns a query that finds
+// a list of instances of entity by the ID of the related entity
+func GraphqlFinderQueryFromRelation(e *Entity, r *Relation) *GraphqlFun {
+	m := &GraphqlFun{
+		Name: fmt.Sprintf("find%sBy%s", e.Plural(), r.Name()),
+		Returns: &GraphqlField{
+			DataType: e.Name,
+			Required: false,
+			Many:     true,
+		},
+	}
+
+	m.Args = append(m.Args, &GraphqlField{
+		Name:     r.Name(),
+		DataType: "String",
+		Required: true,
+		Many:     false,
+	})
+
+	m.Args = append(m.Args, &GraphqlField{
+		Name:     "Limit",
+		DataType: "Int",
+		Required: true,
+		Many:     false,
+	})
+
+	m.Args = append(m.Args, &GraphqlField{
+		Name:     "Offset",
+		DataType: "Int",
+		Required: true,
+		Many:     false,
+	})
+
+	return m
+}
+
 // GraphqlFinderQueryByID is a convenience function representation that
 // models a lookup of an entity by its id
 func GraphqlFinderQueryByID(e *Entity) *GraphqlFun {
 	return GraphqlFinderQueryFromAttribute(e, &Attribute{
 		Name: "ID",
-		Type: "ID",
+		Type: "String",
 	})
 }
 
@@ -223,7 +264,14 @@ func AttributeGraphqlFieldName(a *Attribute) string {
 // AttributeGraphqlFieldDataType returns the Graphql field type for the
 // given attribute
 func AttributeGraphqlFieldDataType(a *Attribute) string {
-	return a.Type
+	switch a.Type {
+	case "ID":
+		return "String"
+	default:
+
+		return a.Type
+	}
+
 }
 
 // GraphqlFieldFromRelation converts a model relation into a more

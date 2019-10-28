@@ -101,7 +101,13 @@ func AddInsertFun(e *Entity, f *File) {
 func AddFindFuns(e *Entity, f *File) {
 	for _, a := range e.Attributes {
 		if a.HasModifier("unique") && a.HasModifier("indexed") {
-			AddFindFun(e, a, f)
+			AddFindByAttributeFun(e, a, f)
+		}
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
+			AddFindByRelationFun(e, r, f)
 		}
 	}
 }
@@ -112,21 +118,110 @@ func FindEntityByAttributeFunName(e *Entity, a *Attribute) string {
 	return fmt.Sprintf("Find%sBy%s", e.Name, a.Name)
 }
 
-// AddFindFun produces a finder function for the given entity and
+// AddFindByAttributeFun produces a finder function for the given entity and
 // attribute
-func AddFindFun(e *Entity, a *Attribute, f *File) {
+func AddFindByAttributeFun(e *Entity, a *Attribute, f *File) {
 	funName := FindEntityByAttributeFunName(e, a)
 	f.Comment(fmt.Sprintf("%s finds an instance of type %s by %s. If no row matches, then this function returns an error", funName, e.Name, a.Name))
-	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), TypedFromAttribute(Id("v"), a)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
+	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), TypedFromAttribute(Id(a.VarName()), a)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
 
-		VarForEntity(e, g)
+		g.Add(EmptyStructForEntity(e))
 		PrepareDbStatement(SelectByColumnStatement(e, a), g)
 		IfErrorReturnWithEntity(e, g)
 		DeferCloseStatement(g)
-		VarNamesForEntity(e, g)
-		ScanRow(e, g)
-		IfErrorReturnWithEntity(e, g)
-		ReturnRow(e, g)
+
+		g.Err().Op("=").Id("stmt").Dot("QueryRow").Call(Id(a.VarName())).Dot("Scan").Call(ListFunc(
+			ScanRowIntoEntityStruct(e),
+		))
+		g.Return(List(
+			Id(e.VarName()),
+			Err(),
+		))
+	})
+}
+
+// FindEntityByRelationFunName returns the name of the finder function for the given
+// entity and relation
+func FindEntityByRelationFunName(e *Entity, r *Relation) string {
+	return fmt.Sprintf("Find%sBy%s", e.Plural(), r.Name())
+}
+
+// AddFindByRelationFun produces a finder function for the given entity
+// and relation. This function will return a list of instances of the
+// given entity
+func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
+	funName := FindEntityByRelationFunName(e, r)
+
+	// error handling code to be used in different points of this
+	// function body
+	ifErrReturn := If(Err().Op("!=").Nil()).Block(
+		Return(
+			Id(VarName(e.Plural())),
+			Err(),
+		),
+	)
+
+	f.Comment(fmt.Sprintf("%s finds a list of instances of type %s by %s. If no rows match, then this function returns an empty slice. Results are sorted and paginated.", funName, e.Name, r.Name()))
+	f.Func().Id(funName).Params(
+		Id("db").Op("*").Qual("database/sql", "DB"),
+		Id("args").Struct(
+			Id(r.Name()).String(),
+			Id("Limit").Int32(),
+			Id("Offset").Int32(),
+		),
+	).Parens(List(
+		Op("[]").Op("*").Id(e.Name),
+		Error(),
+	)).BlockFunc(func(g *Group) {
+		g.Id(VarName(e.Plural())).Op(":=").Op("[]").Op("*").Id(e.Name).Values(Dict{})
+
+		g.List(
+			Id("stmt"),
+			Err(),
+		).Op(":=").Id("db").Dot("Prepare").Call(
+			Qual("fmt", "Sprintf").Call(
+				Lit(fmt.Sprintf(
+					"%s ORDER BY %s ASC LIMIT %%v OFFSET %%v",
+					SelectByColumnStatement(e, &Attribute{
+						Name: r.Name(),
+					}),
+					AttributeColumnName(e.PreferredSort()),
+				)),
+				Id("args").Dot("Limit"),
+				Id("args").Dot("Offset"),
+			),
+		)
+
+		g.Add(ifErrReturn)
+		DeferCall("stmt", "Close", g)
+
+		g.List(
+			Id("rows"),
+			Err(),
+		).Op(":=").Id("stmt").Dot("Query").Call(
+			Id("args").Dot(r.Name()),
+		)
+		g.Add(ifErrReturn)
+
+		DeferCall("rows", "Close", g)
+
+		g.For(
+			Id("rows").Dot("Next").Call(),
+		).BlockFunc(func(g2 *Group) {
+
+			g2.Add(EmptyStructForEntity(e))
+			g2.Err().Op(":=").Id("rows").Dot("Scan").Call(ListFunc(
+				ScanRowIntoEntityStruct(e),
+			))
+
+			g2.Add(ifErrReturn)
+			g2.Id(VarName(e.Plural())).Op("=").Append(Id(VarName(e.Plural())), Id(e.VarName()))
+		})
+
+		g.Return(List(
+			Id(VarName(e.Plural())),
+			Nil(),
+		))
 	})
 }
 
@@ -225,6 +320,23 @@ func SelectByColumnStatement(e *Entity, a *Attribute) string {
 	return strings.Join(chunks, " ")
 }
 
+// EmptyStructForEntity returns a new statement that builds an empty
+// struct, for the given entity
+func EmptyStructForEntity(e *Entity) *Statement {
+	return Id(e.VarName()).Op(":=").Op("&").Id(e.Name).Values(DictFunc(func(d Dict) {
+
+		// Leave default values for attributes
+
+		// IDs to other tables are modelled as strings
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{})
+			}
+		}
+
+	}))
+}
+
 // VarNameForEntity produces a variable for the entity.
 func VarForEntity(e *Entity, g *Group) {
 	g.Var().Id(e.VarName()).Id(e.Name)
@@ -249,21 +361,23 @@ func VarNamesForEntity(e *Entity, g *Group) {
 }
 
 // ScanRow produces the code required to scan a database row for the
-// given entity
-func ScanRow(e *Entity, g *Group) {
-	g.Err().Op("=").Id("stmt").Dot("QueryRow").Call(Id("v")).Dot("Scan").Call(ListFunc(func(g *Group) {
+// given entity, into a struct of that entity. A function that takes a
+// Jennifer Group is returned, so that this helper function can be reused
+// in different contexts
+func ScanRowIntoEntityStruct(e *Entity) func(*Group) {
+	return func(g *Group) {
 		// use the Golang type for the attribute
 		for _, a := range e.Attributes {
-			g.Op("&").Id(a.VarName())
+			g.Op("&").Id(e.VarName()).Dot(a.Name)
 		}
 
 		// IDs to other tables are modelled as strings
 		for _, r := range e.Relations {
 			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-				g.Op("&").Id(r.VarName())
+				g.Op("&").Id(e.VarName()).Dot(r.Name()).Dot("ID")
 			}
 		}
-	}))
+	}
 }
 
 // ReturnRow produces the code required to return an entity populated
@@ -381,5 +495,5 @@ func ReturnNil(g *Group) {
 // returns immediately a tuple with a variable for the entity, and the
 // error
 func IfErrorReturnWithEntity(e *Entity, g *Group) {
-	g.If(Err().Op("!=").Nil()).Block(Return(List(Op("&").Id(e.VarName()), Err())))
+	g.If(Err().Op("!=").Nil()).Block(Return(List(Id(e.VarName()), Err())))
 }

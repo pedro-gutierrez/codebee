@@ -79,6 +79,13 @@ func (e *Entity) VarName() string {
 	return VarName(e.Name)
 }
 
+// Plural returns the plural name for the given entity. This function
+// appends an 's' to the entity name, unless the plural is overriden by
+// the user (to be implemented)
+func (e *Entity) Plural() string {
+	return fmt.Sprintf("%ss", e.Name)
+}
+
 // ImplementTraits translates the entity traits into the appropriate
 // attributes and relations
 func (e *Entity) ImplementTraits() {
@@ -174,6 +181,20 @@ func (e *Entity) Relation(name string) *Relation {
 
 	e.Relations = append(e.Relations, r)
 	return r
+}
+
+// PreferredSort returns the default attribute to be used for
+// sorting items of this entity
+func (e *Entity) PreferredSort() *Attribute {
+	for _, a := range e.Attributes {
+		if a.Name != "ID" && (a.HasModifier("unique") || a.HasModifier("indexed")) {
+			return a
+		}
+	}
+
+	// if no indexed attributes are defined,
+	// then use the ID attribute
+	return &Attribute{Name: "ID"}
 }
 
 // EntityInitialization builds the initialization of a new entity struct
@@ -285,7 +306,7 @@ func (r *Relation) WithModifiers(mods []string) *Relation {
 // VarName returns the variable name representation for the
 // relation
 func (r *Relation) VarName() string {
-	return fmt.Sprintf("%sRel", strings.ToLower(r.Name()))
+	return fmt.Sprintf("%sId", strings.ToLower(r.Name()))
 }
 
 // HasModifier returns true, if the relation has the given modifier
