@@ -12,3 +12,12 @@ chmod +x ./generator
 mkdir -p $GOPATH/src/github.com/flootic/graphdb
 ./generator --model=flootic.yml --output=$GOPATH/src/github.com/flootic/graphdb
 ```
+
+## Run your server
+
+```
+cd $GOPATH/src/github.com/flootic/graphdb
+go run .
+```
+
+GraphiQL should be available at: `http://localhost:8080/`
