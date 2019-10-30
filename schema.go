@@ -37,6 +37,8 @@ func BuildSchema(m *Model) string {
 		s.Types = append(s.Types, GraphqlSchemaTypeFromEntity(e))
 
 		s.Mutations = append(s.Mutations, GraphqlCreateMutationFromEntity(e))
+		s.Mutations = append(s.Mutations, GraphqlUpdateMutationFromEntity(e))
+		s.Mutations = append(s.Mutations, GraphqlDeleteMutationFromEntity(e))
 
 		for _, a := range e.Attributes {
 			if a.HasModifier("indexed") && a.HasModifier("unique") {
@@ -93,6 +95,54 @@ func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 
 		m.Args = append(m.Args, f)
 	}
+
+	return m
+}
+
+// GraphqlUpdateMutationFromEntity returns a mutation that updates
+// instances of the given entity
+func GraphqlUpdateMutationFromEntity(e *Entity) *GraphqlFun {
+	m := &GraphqlFun{
+		Name: fmt.Sprintf("update%s", e.Name),
+		Returns: &GraphqlField{
+			DataType: e.Name,
+			Required: true,
+			Many:     false,
+		},
+	}
+
+	for _, a := range e.Attributes {
+		m.Args = append(m.Args, GraphqlFieldFromAttribute(a))
+	}
+
+	for _, r := range e.Relations {
+		f := GraphqlFieldFromRelation(r)
+		f.DataType = "String"
+
+		m.Args = append(m.Args, f)
+	}
+
+	return m
+}
+
+// GraphqlDeleteMutationFromEntity returns a mutation that deletes
+// instances of the given entity
+func GraphqlDeleteMutationFromEntity(e *Entity) *GraphqlFun {
+	m := &GraphqlFun{
+		Name: fmt.Sprintf("delete%s", e.Name),
+		Returns: &GraphqlField{
+			DataType: e.Name,
+			Required: true,
+			Many:     false,
+		},
+	}
+
+	m.Args = append(m.Args, &GraphqlField{
+		Name:     "id",
+		DataType: "String",
+		Required: true,
+		Many:     false,
+	})
 
 	return m
 }

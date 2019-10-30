@@ -15,6 +15,8 @@ func CreateResolver(p *Package) error {
 		AddTypeResolver(e, f)
 
 		AddCreateMutationResolverFun(e, f)
+		AddUpdateMutationResolverFun(e, f)
+		AddDeleteMutationResolverFun(e, f)
 
 		for _, a := range e.Attributes {
 			if a.HasModifier("indexed") && a.HasModifier("unique") {
@@ -143,6 +145,72 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 			Nil(),
 		)
 	}, f)
+}
+
+// AddUpdateResolverFun defines an update resolver function for the given
+// entity
+func AddUpdateMutationResolverFun(e *Entity, f *File) {
+	fun := GraphqlUpdateMutationFromEntity(e)
+	res := GraphqlResolverResult(fun)
+	ResolverFun(fun, func(g *Group) {
+		g.List(
+			Id(e.VarName()),
+			Err(),
+		).Op(":=").Id(fmt.Sprintf("Update%s", e.Name)).Call(
+			Id("r").Dot("Db"),
+			Op("&").Id(e.Name).Values(DictFunc(func(d Dict) {
+				// build a input for the entity, taking values
+				// from the resolver args
+				for _, a := range e.Attributes {
+					value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
+					d[Id(a.Name)] = value
+				}
+
+				for _, r := range e.Relations {
+					if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
+						d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+							Id("ID"): Id("args").Dot(strings.Title(r.Name())),
+						})
+					}
+				}
+			})),
+		)
+
+		MaybeReturnWrappedError(fmt.Sprintf("Error updating %s", e.Name), g)
+		g.Return(
+			Op("&").Add(Id(res)).Values(Dict{
+				Id("Db"):   Id("r").Dot("Db"),
+				Id("Data"): Id(e.VarName()),
+			}),
+			Nil(),
+		)
+	}, f)
+}
+
+// AddDeleteMutationResolverFun defines a delete resolver function for the given
+// entity
+func AddDeleteMutationResolverFun(e *Entity, f *File) {
+	fun := GraphqlDeleteMutationFromEntity(e)
+	res := GraphqlResolverResult(fun)
+	ResolverFun(fun, func(g *Group) {
+		g.List(
+			Id(e.VarName()),
+			Err(),
+		).Op(":=").Id(fmt.Sprintf("Delete%s", e.Name)).Call(
+			Id("r").Dot("Db"),
+			Id("args").Dot("Id"),
+		)
+
+		MaybeReturnWrappedError(fmt.Sprintf("Error deleting %s", e.Name), g)
+		g.Return(
+			Op("&").Add(Id(res)).Values(Dict{
+				Id("Db"):   Id("r").Dot("Db"),
+				Id("Data"): Id(e.VarName()),
+			}),
+			Nil(),
+		)
+	}, f)
+
 }
 
 // AddFinderByAttributeQueryResolverFun defines a resolver function for the given

@@ -56,6 +56,8 @@ func AddRepoFuns(entities []*Entity, f *File) {
 	for _, e := range entities {
 
 		AddInsertFun(e, f)
+		AddUpdateFun(e, f)
+		AddDeleteFun(e, f)
 		AddFindFuns(e, f)
 	}
 }
@@ -92,6 +94,82 @@ func AddInsertFun(e *Entity, f *File) {
 
 		CommitTransaction(g)
 		IfErrorReturnEntityAndError(e, g)
+		ReturnEntityAndNil(e, g)
+	})
+}
+
+// UpdateEntityFunName returns the name of the update function for the
+// entity
+func UpdateEntityFunName(e *Entity) string {
+	return fmt.Sprintf("Update%s", e.Name)
+}
+
+// AddInsertFun produces the function that inserts the given
+// entity to the database.
+func AddUpdateFun(e *Entity, f *File) {
+	funName := UpdateEntityFunName(e)
+
+	f.Comment(fmt.Sprintf("%s updates an existing entity of type %s into the database", funName, e.Name))
+	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), Id(e.VarName()).Op("*").Id(e.Name)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
+
+		// Open a transaction
+		BeginTransaction(g)
+		IfErrorReturnEntityAndError(e, g)
+
+		DeferRollbackTransaction(g)
+		PrepareTransactionStatement(UpdateStatement(e), g)
+		IfErrorReturnEntityAndError(e, g)
+
+		DeferCloseStatement(g)
+
+		ExecuteStatement(g, func(g2 *Group) {
+			UpdateStatementValues(e, g2)
+		})
+		IfErrorReturnEntityAndError(e, g)
+
+		CommitTransaction(g)
+		IfErrorReturnEntityAndError(e, g)
+		ReturnEntityAndNil(e, g)
+	})
+}
+
+// DeleteEntityFunName returns the name of the delete function for the
+// entity
+func DeleteEntityFunName(e *Entity) string {
+	return fmt.Sprintf("Delete%s", e.Name)
+}
+
+// AddDeleteFun produces the function that deletes the given
+// entity to the database, by its ID.
+func AddDeleteFun(e *Entity, f *File) {
+	funName := DeleteEntityFunName(e)
+
+	f.Comment(fmt.Sprintf("%s deletes an existing entity of type %s from the database, by its id", funName, e.Name))
+	f.Func().Id(funName).Params(
+		Id("db").Op("*").Qual("database/sql", "DB"),
+		Id("id").String(),
+	).Parens(
+		List(Op("*").Id(e.Name),
+			Error(),
+		)).BlockFunc(func(g *Group) {
+
+		g.Add(EmptyStructForEntity(e))
+
+		BeginTransaction(g)
+		IfErrorReturnEntityAndError(e, g)
+
+		DeferRollbackTransaction(g)
+		PrepareTransactionStatement(DeleteStatement(e), g)
+		IfErrorReturnEntityAndError(e, g)
+
+		DeferCloseStatement(g)
+
+		ExecuteStatement(g, func(g2 *Group) {
+			DeleteStatementValues(e, g2)
+		})
+		IfErrorReturnEntityAndError(e, g)
+
+		CommitTransaction(g)
 		ReturnEntityAndNil(e, g)
 	})
 }
@@ -291,6 +369,70 @@ func InsertStatementValues(e *Entity, g *Group) {
 			g.Id(e.VarName()).Dot(r.Name()).Dot("ID")
 		}
 	}
+}
+
+// UpdateStatement generates a sql INSERT statement for the given entity
+func UpdateStatement(e *Entity) string {
+	chunks := []string{}
+	chunks = append(chunks, "UPDATE")
+	chunks = append(chunks, TableName(e))
+	chunks = append(chunks, "SET")
+
+	columns := []string{}
+	for _, a := range e.Attributes {
+		if a.Name != "ID" {
+			col := fmt.Sprintf("%s=?", AttributeColumnName(a))
+			columns = append(columns, col)
+		}
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+			col := fmt.Sprintf("%s=?", RelationColumnName(r))
+			columns = append(columns, col)
+		}
+	}
+
+	chunks = append(chunks, strings.Join(columns, ","))
+	chunks = append(chunks, "WHERE id=?")
+	return strings.Join(chunks, " ")
+}
+
+// UpdateStatementValues generates the Golang code that populates the
+// values to be sent to the UPDATE sql statement for the entity
+func UpdateStatementValues(e *Entity, g *Group) {
+
+	// bindings for the columns to update
+	for _, a := range e.Attributes {
+		if a.Name != "ID" {
+			g.Id(e.VarName()).Dot(a.Name)
+		}
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+			g.Id(e.VarName()).Dot(r.Name()).Dot("ID")
+		}
+	}
+
+	// binding for the where clause
+	g.Id(e.VarName()).Dot("ID")
+}
+
+// DeleteStatement generates a sql DELETE statement for the given entity
+func DeleteStatement(e *Entity) string {
+	chunks := []string{}
+	chunks = append(chunks, "DELETE FROM")
+	chunks = append(chunks, TableName(e))
+	chunks = append(chunks, "WHERE id=?")
+	return strings.Join(chunks, " ")
+}
+
+// DeleteStatementValues generates the Golang code that populates the
+// values to be sent to the DELETE sql statement for the entity
+func DeleteStatementValues(e *Entity, g *Group) {
+
+	g.Id("id")
 }
 
 // SelectByColumnStatement generates a SELECT statement that performs a
