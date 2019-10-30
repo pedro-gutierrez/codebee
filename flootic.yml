@@ -3,6 +3,10 @@ entities:
     traits:
       - keys
       - owner
+    relations:
+      - entity: Address
+        modifiers:
+          - hasOne
   - name: User
     attributes:
       - name: Email
@@ -15,20 +19,184 @@ entities:
       - entity: Organization
         modifiers:
           - belongsTo
+      - entity: Address
+        modifiers:
+          - hasOne
     traits:
       - id
+  - name: Credentials
+    traits:
+      - id
+    attributes:
+      - name: Username
+        type: String
+        modifiers:
+          - unique
+          - required
+          - indexed
+      - name: Password
+        type: String
+        modifiers:
+          - hashed
+    relations:
+      - entity: User
+        modifiers:
+          - belongTo
+  - name: Address
+    traits:
+      - id
+    attributes:
+      - name: Line1
+        type: String
+      - name: Line2
+        type: String
+      - name: City
+        type: String
+      - name: Zip
+        type: String
+      - name: Country
+        type: String
+  - name: Command
+    traits:
+      - keys
+    attributes:
+      - name: Type
+        type: CommandType
   - name: Poi
     traits:
       - keys
       - owner
+  - name: Vehicle
+    traits:
+      - id
+    attributes:
+      - name: plate
+        type: String
+    relations:
+      - entity: Organization
+        modifiers:
+          - belongsTo
   - name: Brand
     traits:
       - keys
-  - name: Device
-    relations:
-      - entity: Brand
-        modifiers:
-          - belongsTo
+  - name: Model
     traits:
       - keys
       - owner
+    attributes:
+      - name: Status
+        type: ModelStatus
+        modifiers:
+          - indexed
+  - name: Device
+    traits:
+      - keys
+      - owner
+    attributes:
+      - name: Serial
+        type: String
+        modifiers:
+          - unique
+          - indexed
+    relations:
+      - entity: Model
+        modifiers:
+          - belongsTo
+      - entity: Organization
+        modifiers:
+          - belongsTo
+      - entity: Vehicle
+        modifiers:
+          - hasOne
+  - name: Sim
+    traits:
+      - id
+    attributes:
+      - name: Imei
+        type: String
+        modifiers:
+          - indexed
+          - unique
+      - name: Phone
+        type: String
+        modifiers:
+          - indexed
+          - unique
+      - name: Status
+        type: SimStatus
+        modifiers:
+          - indexed
+    relations:
+      - entity: Device
+        modifiers:
+          - belongsTo
+  - name: Sensor
+    traits:
+      - keys
+    relations:
+      - entity: Device
+        modifiers:
+          - belongsTo
+types:
+  - name: CommandType
+    type: String
+    values:
+      - sms
+      - gprs
+  - name: Role
+    type: String
+    values:
+      - superadmin
+      - owner
+      - supervisor
+      - maintainer
+      - viewer
+      - demo
+      - provider
+  - name: Status
+    type: String
+    values:
+      - active
+      - disabled
+  - name: IdentityStatus
+    type: String
+    values:
+      - verified
+      - unverified
+      - banned
+  - name: AlertType
+    type: String
+    values:
+      - speec
+      - zone
+      - fuel
+      - temperature
+      - theft
+      - crane
+  - name: StockStatus
+    type: String
+    values:
+      - inStock
+      - outOfStock
+  - name: ModelStatus
+    type: Union
+    values:
+      - Status
+      - StockStatus
+  - name: SimStatus
+    type: Union
+    values:
+      - Status
+      - StockStatus
+  - name: Speed
+    type: String
+    values:
+      - kmh
+      - mph
+      - knt
+      - fps
+  - name: Lang
+    type: String
+    values:
+      - en
+      - es

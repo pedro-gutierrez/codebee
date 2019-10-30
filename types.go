@@ -10,6 +10,7 @@ import (
 
 // Model describes the Flootic application model
 type Model struct {
+	Types    []*UDType
 	Entities []*Entity
 }
 
@@ -24,6 +25,7 @@ func ReadModelFromFile(path string) (*Model, error) {
 	}
 	err = yaml.Unmarshal(yamlFile, m)
 	m.ImplementTraits()
+	m.ResolveTypes()
 	return m, err
 }
 
@@ -44,10 +46,64 @@ func (m *Model) ImplementTraits() {
 	}
 }
 
+// EntityForName returns the entity of the given name, in the model, or
+// nil if no such entity is found
+func (m *Model) EntityForName(n string) *Entity {
+	for _, e := range m.Entities {
+		if e.Name == n {
+			return e
+		}
+	}
+
+	return nil
+}
+
+// TypeForName returns the user defined of the given name, in the model, or
+// nil if no such entity is found
+func (m *Model) TypeForName(n string) *UDType {
+	for _, t := range m.Types {
+		if t.Name == n {
+			return t
+		}
+	}
+
+	return nil
+}
+
+// ResolveTypes resolves complex user defined types.
+func (m *Model) ResolveTypes() {
+	for _, t := range m.Types {
+		if t.Type == "Union" {
+			newValues := []string{}
+			newType := t.Type
+			for _, v := range t.Values {
+				if t2 := m.TypeForName(v); t2 != nil {
+					for _, v2 := range t2.Values {
+						newValues = append(newValues, v2)
+					}
+					newType = "String"
+				} else {
+					newValues = append(newValues, v)
+				}
+			}
+			t.Type = newType
+			t.Values = newValues
+		}
+	}
+}
+
 // VarName converts the given name, into a golang variable name. The
 // convention is to convert all to lowercase.
 func VarName(name string) string {
 	return strings.ToLower(name)
+}
+
+// UDType represents a user defined type. This will allow for
+// extensibility
+type UDType struct {
+	Name   string
+	Type   string
+	Values []string
 }
 
 // Entity represents a persisted datatype, such as an Organization, a

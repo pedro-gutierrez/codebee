@@ -33,6 +33,17 @@ func AddNewSchemaFun(m *Model, f *File) {
 func BuildSchema(m *Model) string {
 	s := &GraphqlSchema{}
 
+	for _, t := range m.Types {
+		if t.Type == "String" && len(t.Values) > 0 {
+			s.Enums = append(s.Enums, GraphqlEnumFromUDType(t))
+		}
+
+		if t.Type == "Union" && len(t.Values) > 0 {
+			s.Unions = append(s.Unions, GraphqlUnionFromUDType(t))
+		}
+
+	}
+
 	for _, e := range m.Entities {
 		s.Types = append(s.Types, GraphqlSchemaTypeFromEntity(e))
 
@@ -210,6 +221,8 @@ func GraphqlFinderQueryByID(e *Entity) *GraphqlFun {
 
 // GraphqlSchema is an internal simplified Graphql model
 type GraphqlSchema struct {
+	Enums     []*GraphqlEnum
+	Unions    []*GraphqlUnion
 	Types     []*GraphqlType
 	Queries   []*GraphqlFun
 	Mutations []*GraphqlFun
@@ -223,6 +236,13 @@ func (s *GraphqlSchema) String() string {
         mutation: Mutation
     }`)
 
+	for _, e := range s.Enums {
+		chunks = append(chunks, fmt.Sprintf("%s\n", e.String()))
+	}
+	chunks = append(chunks, "\n\n")
+	for _, u := range s.Unions {
+		chunks = append(chunks, fmt.Sprintf("%s\n", u.String()))
+	}
 	chunks = append(chunks, "\n\n")
 	for _, t := range s.Types {
 		chunks = append(chunks, fmt.Sprintf("%s\n", t.String()))
@@ -296,6 +316,51 @@ func GraphqlFieldFromAttribute(a *Attribute) *GraphqlField {
 		DataType: AttributeGraphqlFieldDataType(a),
 		Required: true,
 		Many:     false,
+	}
+}
+
+// GraphqlUnion represents a Graphql Union type.
+type GraphqlUnion struct {
+	Name   string
+	Values []string
+}
+
+// Generates the text representation of the Union type
+func (t *GraphqlUnion) String() string {
+	return fmt.Sprintf("union %s = %s", t.Name, strings.Join(t.Values, " | "))
+}
+
+// GraphqlUnionFromUDType converts the given user defined type into a
+// Graphql union type
+func GraphqlUnionFromUDType(t *UDType) *GraphqlUnion {
+	return &GraphqlUnion{
+		Name:   t.Name,
+		Values: t.Values,
+	}
+}
+
+// GraphqlEnum represents a Graphql Enum.
+type GraphqlEnum struct {
+	Name   string
+	Values []string
+}
+
+func (t *GraphqlEnum) String() string {
+	chunks := []string{}
+	chunks = append(chunks, fmt.Sprintf("enum %s {\n", t.Name))
+	for _, v := range t.Values {
+		chunks = append(chunks, fmt.Sprintf("  %s\n", v))
+	}
+	chunks = append(chunks, "}\n")
+	return strings.Join(chunks, "")
+}
+
+// GraphqlEnumFromUDType converts the given user defined type into a
+// Graphql enum
+func GraphqlEnumFromUDType(t *UDType) *GraphqlEnum {
+	return &GraphqlEnum{
+		Name:   t.Name,
+		Values: t.Values,
 	}
 }
 
