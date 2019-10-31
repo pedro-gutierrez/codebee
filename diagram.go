@@ -109,14 +109,6 @@ func DotLinkStyleFromRelation(r *Relation) string {
 // DotLinkLabelFromRelation defines the style to apply to a link,
 // according to the type of relation between two entities
 func DotLinkLabelFromRelation(r *Relation) string {
-	if r.HasModifier("belongsTo") {
-		return "Belongs to"
-	}
-
-	if r.HasModifier("hasOne") {
-		return "Has one"
-	}
-
 	return r.Name()
 }
 

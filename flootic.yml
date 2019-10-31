@@ -88,6 +88,15 @@ entities:
         type: ModelStatus
         modifiers:
           - indexed
+    relations:
+      - entity: Organization
+        alias: Manufacturer
+        modifiers:
+          - hasOne
+      - entity: Organization
+        alias: Provider
+        modifiers:
+          - hasOne
   - name: Device
     traits:
       - keys
@@ -103,8 +112,9 @@ entities:
         modifiers:
           - belongsTo
       - entity: Organization
+        alias: Purchaser
         modifiers:
-          - belongsTo
+          - hasOne
       - entity: Vehicle
         modifiers:
           - hasOne
