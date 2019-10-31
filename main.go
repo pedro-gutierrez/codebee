@@ -110,6 +110,16 @@ func main() {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error generating main: %v", err))
 	}
+
+	err = CreateDiagram(&Package{
+		Name:     packageName,
+		Filename: path.Join(*output, "diagram.dot"),
+		Model:    model,
+	})
+
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Error generating diagram: %v", err))
+	}
 }
 
 // CreateMain generates the main.go in the target directory. This will
