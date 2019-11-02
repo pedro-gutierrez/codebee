@@ -67,7 +67,7 @@ func AddAttributeResolver(e *Entity, a *Attribute, f *File) {
 		Id("ctx").Qual("context", "Context"),
 	).Add(returnType).BlockFunc(func(g *Group) {
 		value := Id("r").Dot("Data").Dot(a.Name)
-		g.Return(value)
+		g.Return(CastToGraphqlType(value, GraphqlFieldFromAttribute(a)))
 	})
 }
 
@@ -118,22 +118,7 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 			Err(),
 		).Op(":=").Id(fmt.Sprintf("Insert%s", e.Name)).Call(
 			Id("r").Dot("Db"),
-			Op("&").Id(e.Name).Values(DictFunc(func(d Dict) {
-				// build a input for the entity, taking values
-				// from the resolver args
-				for _, a := range e.Attributes {
-					value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
-					d[Id(a.Name)] = value
-				}
-
-				for _, r := range e.Relations {
-					if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
-						d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
-							Id("ID"): Id("args").Dot(strings.Title(r.Name())),
-						})
-					}
-				}
-			})),
+			Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e))),
 		)
 
 		MaybeReturnWrappedError(fmt.Sprintf("Error inserting %s", e.Name), g)
@@ -158,22 +143,7 @@ func AddUpdateMutationResolverFun(e *Entity, f *File) {
 			Err(),
 		).Op(":=").Id(fmt.Sprintf("Update%s", e.Name)).Call(
 			Id("r").Dot("Db"),
-			Op("&").Id(e.Name).Values(DictFunc(func(d Dict) {
-				// build a input for the entity, taking values
-				// from the resolver args
-				for _, a := range e.Attributes {
-					value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
-					d[Id(a.Name)] = value
-				}
-
-				for _, r := range e.Relations {
-					if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
-						d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
-							Id("ID"): Id("args").Dot(strings.Title(r.Name())),
-						})
-					}
-				}
-			})),
+			Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e))),
 		)
 
 		MaybeReturnWrappedError(fmt.Sprintf("Error updating %s", e.Name), g)
@@ -187,6 +157,33 @@ func AddUpdateMutationResolverFun(e *Entity, f *File) {
 	}, f)
 }
 
+// EntityStructFromArgsDictFunc builds a function that takes a
+// dictionary and builds all the fields read from args, and adapts them
+// into a struct of the given entity, casting values from Graphql into
+// plain Golang types
+func EntityStructFromArgsDictFunc(e *Entity) func(Dict) {
+	return func(d Dict) {
+		// build a input for the entity, taking values
+		// from the resolver args
+		for _, a := range e.Attributes {
+			f := GraphqlFieldFromAttribute(a)
+			value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
+			d[Id(a.Name)] = CastFromGraphqlType(value, f)
+		}
+
+		for _, r := range e.Relations {
+			if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
+				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+					Id("ID"): CastFromGraphqlType(
+						Id("args").Dot(strings.Title(r.Name())),
+						GraphqlInputFieldFromRelation(r),
+					),
+				})
+			}
+		}
+	}
+}
+
 // AddDeleteMutationResolverFun defines a delete resolver function for the given
 // entity
 func AddDeleteMutationResolverFun(e *Entity, f *File) {
@@ -198,7 +195,9 @@ func AddDeleteMutationResolverFun(e *Entity, f *File) {
 			Err(),
 		).Op(":=").Id(fmt.Sprintf("Delete%s", e.Name)).Call(
 			Id("r").Dot("Db"),
-			Id("args").Dot("Id"),
+			CastFromGraphqlType(Id("args").Dot("Id"), &GraphqlField{
+				DataType: "ID",
+			}),
 		)
 
 		MaybeReturnWrappedError(fmt.Sprintf("Error deleting %s", e.Name), g)
@@ -227,7 +226,7 @@ func AddFinderByAttributeQueryResolverFun(e *Entity, a *Attribute, f *File) {
 			Err(),
 		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.Name, a.Name)).Call(
 			Id("r").Dot("Db"),
-			value,
+			CastFromGraphqlType(value, GraphqlFieldFromAttribute(a)),
 		)
 
 		MaybeReturnWrappedError(fmt.Sprintf("Error resolving %s by %s", e.Name, a.Name), g)
@@ -253,7 +252,12 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 			Err(),
 		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.Plural(), r.Name())).Call(
 			Id("r").Dot("Db"),
-			Id("args"),
+			CastFromGraphqlType(
+				Id("args").Dot(r.Name()),
+				GraphqlInputFieldFromRelation(r),
+			),
+			Id("args").Dot("Limit"),
+			Id("args").Dot("Offset"),
 		)
 
 		MaybeReturnWrappedError(fmt.Sprintf("Error resolving %s by %s", e.Plural(), r.Name()), g)
@@ -356,7 +360,7 @@ func GraphqlResolverDataTypeFromGraphqlField(a *GraphqlField) *Statement {
 func GraphqlResolverDataTypeFromDataType(d string) *Statement {
 	switch d {
 	case "ID":
-		return String()
+		return Qual("github.com/graph-gophers/graphql-go", "ID")
 
 	case "String":
 		return String()
@@ -371,6 +375,30 @@ func GraphqlResolverDataTypeFromDataType(d string) *Statement {
 
 	}
 
+}
+
+// CastToGraphqlType transforms the given statement, and
+// casts into a Graphql type, if necessary.
+func CastToGraphqlType(s *Statement, f *GraphqlField) *Statement {
+	switch f.DataType {
+	case "ID":
+		return Qual("github.com/graph-gophers/graphql-go", "ID").Call(s)
+
+	default:
+		return s
+	}
+}
+
+// CastFromGraphqlType transforms the given statement, and
+// casts into a Graphql type, if necessary.
+func CastFromGraphqlType(s *Statement, f *GraphqlField) *Statement {
+	switch f.DataType {
+	case "ID":
+		return String().Call(s)
+
+	default:
+		return s
+	}
 }
 
 // MaybeReturnWrappedError produces the code that returns immediately

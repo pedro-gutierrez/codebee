@@ -102,7 +102,7 @@ func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 
 	for _, r := range e.Relations {
 		f := GraphqlFieldFromRelation(r)
-		f.DataType = "String"
+		f.DataType = "ID"
 
 		m.Args = append(m.Args, f)
 	}
@@ -128,7 +128,7 @@ func GraphqlUpdateMutationFromEntity(e *Entity) *GraphqlFun {
 
 	for _, r := range e.Relations {
 		f := GraphqlFieldFromRelation(r)
-		f.DataType = "String"
+		f.DataType = "ID"
 
 		m.Args = append(m.Args, f)
 	}
@@ -150,7 +150,7 @@ func GraphqlDeleteMutationFromEntity(e *Entity) *GraphqlFun {
 
 	m.Args = append(m.Args, &GraphqlField{
 		Name:     "id",
-		DataType: "String",
+		DataType: "ID",
 		Required: true,
 		Many:     false,
 	})
@@ -188,7 +188,7 @@ func GraphqlFinderQueryFromRelation(e *Entity, r *Relation) *GraphqlFun {
 
 	m.Args = append(m.Args, &GraphqlField{
 		Name:     r.Name(),
-		DataType: "String",
+		DataType: "ID",
 		Required: true,
 		Many:     false,
 	})
@@ -215,7 +215,7 @@ func GraphqlFinderQueryFromRelation(e *Entity, r *Relation) *GraphqlFun {
 func GraphqlFinderQueryByID(e *Entity) *GraphqlFun {
 	return GraphqlFinderQueryFromAttribute(e, &Attribute{
 		Name: "ID",
-		Type: "String",
+		Type: "ID",
 	})
 }
 
@@ -290,7 +290,7 @@ type GraphqlFun struct {
 func (o *GraphqlFun) String() string {
 	args := []string{}
 	for _, a := range o.Args {
-		args = append(args, fmt.Sprintf("%s:%s", a.Name, a.DataTypeString()))
+		args = append(args, fmt.Sprintf("%s:%s", strcase.ToLowerCamel(a.Name), a.DataTypeString()))
 	}
 
 	return fmt.Sprintf("%s(%s): %s",
@@ -381,7 +381,7 @@ func AttributeGraphqlFieldName(a *Attribute) string {
 func AttributeGraphqlFieldDataType(a *Attribute) string {
 	switch a.Type {
 	case "ID":
-		return "String"
+		return "ID"
 	default:
 
 		return a.Type
@@ -398,6 +398,15 @@ func GraphqlFieldFromRelation(r *Relation) *GraphqlField {
 		Required: true,
 		Many:     r.HasModifier("hasMany"),
 	}
+}
+
+// GraphqlInputFieldFromRelation converts a model relation into a more
+// convenient Graphql Field. This function deals with input types, where
+// the datatype is a graphql ID, not an entity.
+func GraphqlInputFieldFromRelation(r *Relation) *GraphqlField {
+	f := GraphqlFieldFromRelation(r)
+	f.DataType = "ID"
+	return f
 }
 
 // RelationGraphqlFieldName returns the Graphql field name for the

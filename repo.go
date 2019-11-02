@@ -242,11 +242,9 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 	f.Comment(fmt.Sprintf("%s finds a list of instances of type %s by %s. If no rows match, then this function returns an empty slice. Results are sorted and paginated.", funName, e.Name, r.Name()))
 	f.Func().Id(funName).Params(
 		Id("db").Op("*").Qual("database/sql", "DB"),
-		Id("args").Struct(
-			Id(r.Name()).String(),
-			Id("Limit").Int32(),
-			Id("Offset").Int32(),
-		),
+		Id(r.VarName()).String(),
+		Id("limit").Int32(),
+		Id("offset").Int32(),
 	).Parens(List(
 		Op("[]").Op("*").Id(e.Name),
 		Error(),
@@ -265,8 +263,8 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 					}),
 					AttributeColumnName(e.PreferredSort()),
 				)),
-				Id("args").Dot("Limit"),
-				Id("args").Dot("Offset"),
+				Id("limit"),
+				Id("offset"),
 			),
 		)
 
@@ -277,7 +275,7 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 			Id("rows"),
 			Err(),
 		).Op(":=").Id("stmt").Dot("Query").Call(
-			Id("args").Dot(r.Name()),
+			Id(r.VarName()),
 		)
 		g.Add(ifErrReturn)
 
