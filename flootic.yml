@@ -8,6 +8,8 @@ entities:
         modifiers:
           - hasOne
   - name: User
+    traits:
+      - id
     attributes:
       - name: Email
         type: String
@@ -16,14 +18,19 @@ entities:
           - required
           - indexed
     relations:
-      - entity: Organization
-        modifiers:
-          - belongsTo
       - entity: Address
         modifiers:
           - hasOne
+  - name: Membership
     traits:
       - id
+    relations:
+      - entity: User
+        modifiers:
+          - hasOne
+      - entity: Organization
+        modifiers:
+          - hasOne
   - name: Credentials
     traits:
       - id
@@ -42,6 +49,18 @@ entities:
       - entity: User
         modifiers:
           - belongTo
+  - name: Token
+    traits:
+      - id
+    attributes:
+      - name: Expires
+        type: Int
+      - name: Permissions
+        type: String
+    relations:
+      - entity: User
+        modifiers:
+          - belongsTo
   - name: Address
     traits:
       - id

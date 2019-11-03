@@ -384,6 +384,8 @@ func CastToGraphqlType(s *Statement, f *GraphqlField) *Statement {
 	case "ID":
 		return Qual("github.com/graph-gophers/graphql-go", "ID").Call(s)
 
+	case "Int":
+		return Id("int32").Call(s)
 	default:
 		return s
 	}
@@ -396,6 +398,8 @@ func CastFromGraphqlType(s *Statement, f *GraphqlField) *Statement {
 	case "ID":
 		return String().Call(s)
 
+	case "Int":
+		return Int().Call(s)
 	default:
 		return s
 	}

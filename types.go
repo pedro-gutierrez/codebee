@@ -58,6 +58,19 @@ func (m *Model) EntityForName(n string) *Entity {
 	return nil
 }
 
+// EntityForNameOrPanic returns the entity of the given name, in the
+// model. If the entity is not found, then this function will panic
+func (m *Model) EntityForNameOrPanic(n string) *Entity {
+	e := m.EntityForName(n)
+
+	if e == nil {
+		panic(fmt.Sprintf("Entity %s not found in model", n))
+	}
+
+	return e
+
+}
+
 // TypeForName returns the user defined of the given name, in the model, or
 // nil if no such entity is found
 func (m *Model) TypeForName(n string) *UDType {

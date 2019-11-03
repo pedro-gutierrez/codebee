@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	. "github.com/dave/jennifer/jen"
-	//"github.com/iancoleman/strcase"
+	"github.com/iancoleman/strcase"
 	"strings"
 )
 
@@ -26,7 +26,7 @@ func AddNewDbFun(f *File) {
 	// For now this code is sqlite3 specific.
 	f.Anon("github.com/mattn/go-sqlite3")
 
-	f.Comment(fmt.Sprintf("%s a new database handle", funName))
+	f.Comment(fmt.Sprintf("%s initializes a new database handle", funName))
 	f.Func().Id(funName).Params().Parens(List(
 		Op("*").Qual("database/sql", "DB"),
 		Error(),
@@ -54,8 +54,11 @@ func AddSqlSchemaFun(m *Model, f *File) {
 
 			for _, e := range m.Entities {
 				AddEntityDropTable(e, g)
-				AddEntityCreateTable(e, g)
+				AddEntityCreateTable(e, m, g)
+				AddEntityIndices(e, g)
 			}
+
+			AddExtraSqlInitialization(g)
 		}),
 		))
 }
@@ -68,23 +71,104 @@ func AddEntityDropTable(e *Entity, g *Group) {
 
 // AddEntityCreateTable adds a CREATE TABLE statement to the schema, for
 // the given entity
-func AddEntityCreateTable(e *Entity, g *Group) {
+func AddEntityCreateTable(e *Entity, m *Model, g *Group) {
 	chunks := []string{}
 	chunks = append(chunks, fmt.Sprintf("CREATE TABLE %s (", TableName(e)))
 
 	colsChunks := []string{}
 	for _, a := range e.Attributes {
-		colsChunks = append(colsChunks, fmt.Sprintf("%s %s", AttributeColumnName(a), AttributeSqlType(a)))
+		colsChunks = append(colsChunks, TableColumnFromAttribute(a))
 	}
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			colsChunks = append(colsChunks, fmt.Sprintf("%s %s", RelationColumnName(r), RelationSqlType(r)))
+			colsChunks = append(colsChunks, TableColumnFromRelation(r))
+		}
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+			colsChunks = append(colsChunks, ForeignKeyConstraintFromRelation(r, m))
 		}
 	}
 
 	chunks = append(chunks, strings.Join(colsChunks, ", "))
 	chunks = append(chunks, ")")
 	g.Lit(strings.Join(chunks, ""))
+}
+
+// AddEntityIndices generates the database indices for the given table
+func AddEntityIndices(e *Entity, g *Group) {
+	for _, a := range e.Attributes {
+		if a.Name != "ID" && (a.HasModifier("unique") || a.HasModifier("indexed")) {
+
+			tableName := TableName(e)
+			columnName := AttributeColumnName(a)
+
+			chunks := []string{}
+			chunks = append(chunks, "CREATE")
+
+			if a.HasModifier("unique") {
+				chunks = append(chunks, "UNIQUE")
+			}
+
+			chunks = append(chunks, "INDEX")
+			chunks = append(chunks, fmt.Sprintf("%s_%s", tableName, columnName))
+			chunks = append(chunks, "ON")
+			chunks = append(chunks, fmt.Sprintf("%s(%s)", tableName, columnName))
+
+			g.Lit(strings.Join(chunks, " "))
+		}
+	}
+}
+
+// AddExtraSqlInitialization adds extra database initialization steps
+func AddExtraSqlInitialization(g *Group) {
+	g.Lit("PRAGMA foreign_keys = ON")
+
+}
+
+// TableColumnFromAttribute builds the column specification for the
+// given attribute.
+func TableColumnFromAttribute(a *Attribute) string {
+	dataType := AttributeSqlType(a)
+	spec := fmt.Sprintf("%s %s", AttributeColumnName(a), dataType)
+	if dataType == "varchar" {
+		spec = fmt.Sprintf("%s NOT NULL", spec)
+	}
+
+	if a.Name == "ID" {
+		spec = fmt.Sprintf("%s PRIMARY KEY", spec)
+	}
+
+	return spec
+}
+
+// TableColumnFromRelation builds the column specification for the given
+// relation.
+func TableColumnFromRelation(r *Relation) string {
+	return fmt.Sprintf("%s %s", RelationColumnName(r), RelationSqlType(r))
+}
+
+// ForeignKeyFromRelation builds the foreign key specification for the
+// given relation
+func ForeignKeyConstraintFromRelation(r *Relation, m *Model) string {
+	e := m.EntityForNameOrPanic(r.Entity)
+
+	return fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s(%s)", RelationColumnName(r), TableName(e), "id")
+}
+
+// TableName builds a SQL table name, for the given entity
+func TableName(e *Entity) string {
+	return strings.ToLower(strcase.ToSnake(fmt.Sprintf("%s%s", "Fl", e.Plural())))
+}
+
+// ColumnName
+func AttributeColumnName(a *Attribute) string {
+	return strings.ToLower(strcase.ToSnake(a.Name))
+}
+
+func RelationColumnName(r *Relation) string {
+	return strings.ToLower(strcase.ToSnake(r.Name()))
 }
 
 // AttributeSqlType returns the SQL datatype for an attribute.

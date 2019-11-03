@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	. "github.com/dave/jennifer/jen"
-	"github.com/iancoleman/strcase"
 	"strings"
 )
 
@@ -299,20 +298,6 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 			Nil(),
 		))
 	})
-}
-
-// TableName builds a SQL table name, for the given entity
-func TableName(e *Entity) string {
-	return strings.ToLower(strcase.ToSnake(fmt.Sprintf("%s%s%s", "Fl", e.Name, "s")))
-}
-
-// ColumnName
-func AttributeColumnName(a *Attribute) string {
-	return strings.ToLower(strcase.ToSnake(a.Name))
-}
-
-func RelationColumnName(r *Relation) string {
-	return strings.ToLower(strcase.ToSnake(r.Name()))
 }
 
 // Quoted
