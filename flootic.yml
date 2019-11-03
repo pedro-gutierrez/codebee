@@ -34,6 +34,7 @@ entities:
   - name: Credentials
     traits:
       - id
+      - owner
     attributes:
       - name: Username
         type: String
@@ -45,22 +46,15 @@ entities:
         type: String
         modifiers:
           - hashed
-    relations:
-      - entity: User
-        modifiers:
-          - belongTo
   - name: Token
     traits:
       - id
+      - owner
     attributes:
       - name: Expires
         type: Int
       - name: Permissions
         type: String
-    relations:
-      - entity: User
-        modifiers:
-          - belongsTo
   - name: Address
     traits:
       - id
@@ -101,7 +95,6 @@ entities:
   - name: Model
     traits:
       - keys
-      - owner
     attributes:
       - name: Status
         type: ModelStatus

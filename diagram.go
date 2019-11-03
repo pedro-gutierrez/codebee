@@ -109,7 +109,18 @@ func DotLinkStyleFromRelation(r *Relation) string {
 // DotLinkLabelFromRelation defines the style to apply to a link,
 // according to the type of relation between two entities
 func DotLinkLabelFromRelation(r *Relation) string {
-	return r.Name()
+	name := r.Name()
+	if name == r.Entity {
+		if r.HasModifier("belongsTo") {
+			name = "Belongs to"
+		}
+
+		if r.HasModifier("hasOne") {
+			name = "Has one"
+		}
+	}
+
+	return name
 }
 
 // DotDiagram represents a Graphviz Diagram. It is made of nodes, and
