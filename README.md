@@ -17,6 +17,7 @@ mkdir -p $GOPATH/src/github.com/flootic/graphdb
 
 ```
 cd $GOPATH/src/github.com/flootic/graphdb
+go get
 go run .
 ```
 
