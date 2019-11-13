@@ -101,6 +101,16 @@ func main() {
 		log.Fatal(fmt.Sprintf("Error generating server: %v", err))
 	}
 
+	err = CreateMonitoring(&Package{
+		Name:     packageName,
+		Filename: path.Join(*output, "monitoring.go"),
+		Model:    model,
+	})
+
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Error generating monitoring: %v", err))
+	}
+
 	err = CreateMain(&Package{
 		Name:     packageName,
 		Filename: path.Join(*output, "main.go"),

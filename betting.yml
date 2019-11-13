@@ -1,0 +1,121 @@
+entities:
+  - name: User
+    traits:
+      - id
+  - name: Identity
+    traits:
+      - id
+    attributes:
+      - name: Type
+        type: IdentityType
+      - name: Status
+        type: IdentityStatus
+      - name: Value
+        type: String
+    relations:
+      - entity: User
+        modifiers:
+          - belongsTo
+  - name: Wallet
+    traits:
+      - id
+    attributes:
+      - name: Balance
+        type: Int
+    relations:
+      - entity: User
+        modifiers:
+          - belongsTo
+  - name: Deposit
+    traits:
+      - id
+    attributes:
+      - name: Amount
+        type: Int
+    relations:
+      - entity: Wallet
+        modifiers:
+          - belongsTo
+  - name: Withdrawal
+    traits:
+      - id
+    attributes:
+      - name: Amount
+        type: Int
+    relations:
+      - entity: Wallet
+        modifiers:
+          - belongsTo
+  - name: Event
+    traits:
+      - id
+  - name: Market
+    traits:
+      - id
+    relations:
+      - entity: Event
+        modifiers:
+          - belongsTo
+  - name: Selection
+    traits:
+      - id
+    attributes:
+      - name: Status
+        type: SelectionStatus
+    relations:
+      - entity: Market
+        modifiers:
+          - belongsTo
+  - name: SelectionPrice
+    traits:
+      - id
+    attributes:
+      - name: Created
+        type: Int
+      - name: Price
+        type: Int
+    relations:
+      - entity: Selection
+        modifiers:
+          - belongsTo
+  - name: Bet
+    traits:
+      - id
+    attributes:
+      - name: Created
+        type: Int
+      - name: Status
+        type: BetStatus
+    relations:
+      - entity: SelectionPrice
+        modifiers:
+          - hasOne
+      - entity: User
+        modifiers:
+          - belongsTo
+types:
+  - name: IdentityType
+    type: String
+    values:
+      - email
+      - phone
+      - age
+      - address
+      - bank
+  - name: IdentityStatus
+    type: String
+    values:
+      - verified
+      - pending
+  - name: SelectionStatus
+    type: String
+    values:
+      - active
+      - void
+      - resulted
+  - name: BetStatus
+    type: String
+    values:
+      - pending
+      - confirmed
+      - denied

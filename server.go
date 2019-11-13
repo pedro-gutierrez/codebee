@@ -39,6 +39,12 @@ func AddSetupServerFun(f *File) {
 			Lit("/"),
 			Qual("net/http", "HandlerFunc").Call(Id("htmlHandlerFun")),
 		)
+
+		g.Qual("net/http", "Handle").Call(
+			Lit("/metrics"),
+			g.Qual("github.com/prometheus/client_golang/prometheus/promhttp", "Handler").Call(),
+		)
+
 	})
 }
 

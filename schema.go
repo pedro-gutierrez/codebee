@@ -88,7 +88,7 @@ func GraphqlSchemaTypeFromEntity(e *Entity) *GraphqlType {
 // instances of the given entity
 func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 	m := &GraphqlFun{
-		Name: fmt.Sprintf("create%s", e.Name),
+		Name: GraphqlCreateMutationName(e),
 		Returns: &GraphqlField{
 			DataType: e.Name,
 			Required: true,
@@ -114,7 +114,7 @@ func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 // instances of the given entity
 func GraphqlUpdateMutationFromEntity(e *Entity) *GraphqlFun {
 	m := &GraphqlFun{
-		Name: fmt.Sprintf("update%s", e.Name),
+		Name: GraphqlUpdateMutationName(e),
 		Returns: &GraphqlField{
 			DataType: e.Name,
 			Required: true,
@@ -140,7 +140,7 @@ func GraphqlUpdateMutationFromEntity(e *Entity) *GraphqlFun {
 // instances of the given entity
 func GraphqlDeleteMutationFromEntity(e *Entity) *GraphqlFun {
 	m := &GraphqlFun{
-		Name: fmt.Sprintf("delete%s", e.Name),
+		Name: GraphqlDeleteMutationName(e),
 		Returns: &GraphqlField{
 			DataType: e.Name,
 			Required: true,
@@ -162,7 +162,7 @@ func GraphqlDeleteMutationFromEntity(e *Entity) *GraphqlFun {
 // a single instance of entity by an indexed and unique attribute
 func GraphqlFinderQueryFromAttribute(e *Entity, a *Attribute) *GraphqlFun {
 	m := &GraphqlFun{
-		Name: fmt.Sprintf("find%sBy%s", e.Name, a.Name),
+		Name: GraphqlFindByAttributeQueryName(e, a),
 		Returns: &GraphqlField{
 			DataType: e.Name,
 			Required: true,
@@ -178,7 +178,7 @@ func GraphqlFinderQueryFromAttribute(e *Entity, a *Attribute) *GraphqlFun {
 // a list of instances of entity by the ID of the related entity
 func GraphqlFinderQueryFromRelation(e *Entity, r *Relation) *GraphqlFun {
 	m := &GraphqlFun{
-		Name: fmt.Sprintf("find%sBy%s", e.Plural(), r.Name()),
+		Name: GraphqlFindByRelationQueryName(e, r),
 		Returns: &GraphqlField{
 			DataType: e.Name,
 			Required: false,
@@ -208,6 +208,36 @@ func GraphqlFinderQueryFromRelation(e *Entity, r *Relation) *GraphqlFun {
 	})
 
 	return m
+}
+
+// GraphqlCreateMutationName returns the name of the mutation that
+// creates new instances of the given entity
+func GraphqlCreateMutationName(e *Entity) string {
+	return fmt.Sprintf("create%s", e.Name)
+}
+
+// GraphqlUpdateMutationName returns the name of the mutation that
+// updates instances of the given entity
+func GraphqlUpdateMutationName(e *Entity) string {
+	return fmt.Sprintf("update%s", e.Name)
+}
+
+// GraphqlDeleteMutationName returns the name of the mutation that
+// deletes instances of the given entity
+func GraphqlDeleteMutationName(e *Entity) string {
+	return fmt.Sprintf("delete%s", e.Name)
+}
+
+// GraphqlFindByAttributeQueryName returns the name of the query that
+// find instances of the given entity by the given attribute
+func GraphqlFindByAttributeQueryName(e *Entity, a *Attribute) string {
+	return fmt.Sprintf("find%sBy%s", e.Name, a.Name)
+}
+
+// GraphqlFindByAttributeQueryName returns the name of the query that
+// find instances of the given entity by the given attribute
+func GraphqlFindByRelationQueryName(e *Entity, r *Relation) string {
+	return fmt.Sprintf("find%sBy%s", e.Plural(), r.Name())
 }
 
 // GraphqlFinderQueryByID is a convenience function representation that

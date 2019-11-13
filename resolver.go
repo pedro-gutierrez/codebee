@@ -86,6 +86,9 @@ func AddRelationResolver(e *Entity, r *Relation, f *File) {
 		returnType,
 		Error(),
 	)).BlockFunc(func(g *Group) {
+
+		TimeNow(g)
+
 		g.List(
 			Id(VarName(r.Entity)),
 			Err(),
@@ -94,7 +97,13 @@ func AddRelationResolver(e *Entity, r *Relation, f *File) {
 			Id("r").Dot("Data").Dot(r.Name()).Dot("ID"),
 		)
 
-		MaybeReturnWrappedError(fmt.Sprintf("Error resolving %s as %s of %s", r.Entity, r.Name(), e.Name), g)
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error finding %s by %s", r.Entity, r.Name()),
+			FindByRelationQueryErrorCounterName(e, r),
+			g,
+		)
+
+		ObserveDuration(FindByRelationQueryHistogramName(e, r), g)
 
 		g.Return(
 			Op("&").Add(Id(res)).Values(Dict{
@@ -113,6 +122,9 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 	fun := GraphqlCreateMutationFromEntity(e)
 	res := GraphqlResolverResult(fun)
 	ResolverFun(fun, func(g *Group) {
+
+		TimeNow(g)
+
 		g.List(
 			Id(e.VarName()),
 			Err(),
@@ -121,7 +133,13 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 			Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e))),
 		)
 
-		MaybeReturnWrappedError(fmt.Sprintf("Error inserting %s", e.Name), g)
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error inserting %s", e.Name),
+			CreateMutationErrorCounterName(e),
+			g,
+		)
+
+		ObserveDuration(CreateMutationHistogramName(e), g)
 		g.Return(
 			Op("&").Add(Id(res)).Values(Dict{
 				Id("Db"):   Id("r").Dot("Db"),
@@ -138,6 +156,8 @@ func AddUpdateMutationResolverFun(e *Entity, f *File) {
 	fun := GraphqlUpdateMutationFromEntity(e)
 	res := GraphqlResolverResult(fun)
 	ResolverFun(fun, func(g *Group) {
+		TimeNow(g)
+
 		g.List(
 			Id(e.VarName()),
 			Err(),
@@ -146,7 +166,14 @@ func AddUpdateMutationResolverFun(e *Entity, f *File) {
 			Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e))),
 		)
 
-		MaybeReturnWrappedError(fmt.Sprintf("Error updating %s", e.Name), g)
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error updating %s", e.Name),
+			UpdateMutationErrorCounterName(e),
+			g,
+		)
+
+		ObserveDuration(UpdateMutationHistogramName(e), g)
+
 		g.Return(
 			Op("&").Add(Id(res)).Values(Dict{
 				Id("Db"):   Id("r").Dot("Db"),
@@ -190,6 +217,9 @@ func AddDeleteMutationResolverFun(e *Entity, f *File) {
 	fun := GraphqlDeleteMutationFromEntity(e)
 	res := GraphqlResolverResult(fun)
 	ResolverFun(fun, func(g *Group) {
+
+		TimeNow(g)
+
 		g.List(
 			Id(e.VarName()),
 			Err(),
@@ -200,7 +230,14 @@ func AddDeleteMutationResolverFun(e *Entity, f *File) {
 			}),
 		)
 
-		MaybeReturnWrappedError(fmt.Sprintf("Error deleting %s", e.Name), g)
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error deleting %s", e.Name),
+			DeleteMutationErrorCounterName(e),
+			g,
+		)
+
+		ObserveDuration(DeleteMutationHistogramName(e), g)
+
 		g.Return(
 			Op("&").Add(Id(res)).Values(Dict{
 				Id("Db"):   Id("r").Dot("Db"),
@@ -220,6 +257,9 @@ func AddFinderByAttributeQueryResolverFun(e *Entity, a *Attribute, f *File) {
 	res := GraphqlResolverResult(fun)
 
 	ResolverFun(fun, func(g *Group) {
+
+		TimeNow(g)
+
 		value := Id("args").Dot(strings.Title(AttributeGraphqlFieldName(a)))
 		g.List(
 			Id(e.VarName()),
@@ -229,7 +269,14 @@ func AddFinderByAttributeQueryResolverFun(e *Entity, a *Attribute, f *File) {
 			CastFromGraphqlType(value, GraphqlFieldFromAttribute(a)),
 		)
 
-		MaybeReturnWrappedError(fmt.Sprintf("Error resolving %s by %s", e.Name, a.Name), g)
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error finding %s by %s", e.Name, a.Name),
+			FindByAttributeQueryErrorCounterName(e, a),
+			g,
+		)
+
+		ObserveDuration(FindByAttributeQueryHistogramName(e, a), g)
+
 		g.Return(
 			Op("&").Add(Id(res)).Values(Dict{
 				Id("Db"):   Id("r").Dot("Db"),
@@ -247,6 +294,9 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 	res := GraphqlResolverResult(fun)
 
 	ResolverFun(fun, func(g *Group) {
+
+		TimeNow(g)
+
 		g.List(
 			Id(VarName(e.Plural())),
 			Err(),
@@ -260,7 +310,11 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 			Id("args").Dot("Offset"),
 		)
 
-		MaybeReturnWrappedError(fmt.Sprintf("Error resolving %s by %s", e.Plural(), r.Name()), g)
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error finding %s by %s", e.Name, r.Name()),
+			FindByRelationQueryErrorCounterName(e, r),
+			g,
+		)
 
 		g.Id("resolvers").Op(":=").Id(res).Values(Dict{})
 
@@ -279,6 +333,8 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 				}),
 			)
 		})
+
+		ObserveDuration(FindByRelationQueryHistogramName(e, r), g)
 
 		g.Return(
 			Op("&").Id("resolvers"),
@@ -418,5 +474,36 @@ func MaybeReturnWrappedError(msg string, g *Group) {
 				Lit(msg),
 			),
 		),
+	)
+}
+
+// TimeNow conveniently declares a time marker
+func TimeNow(g *Group) {
+	g.Id("start").Op(":=").Qual("time", "Now").Call()
+}
+
+// MaybeReturnWrappedErrorAndIncrementCounter produces the code that returns immediately
+// and wraps the error with a message. It also increments the counter
+// specified by the given name
+func MaybeReturnWrappedErrorAndIncrementCounter(msg string, counter string, g *Group) {
+	g.If(
+		Err().Op("!=").Nil(),
+	).Block(
+		Id(counter).Dot("Inc").Call(),
+		Return(
+			Nil(),
+			Qual("github.com/pkg/errors", "Wrap").Call(
+				Err(),
+				Lit(msg),
+			),
+		),
+	)
+}
+
+// ObserveDuration produces the code that computes a duration and
+// observes it against the specified histogram
+func ObserveDuration(histogram string, g *Group) {
+	g.Id(histogram).Dot("Observe").Call(
+		Id("float64").Call(Qual("time", "Now").Call().Dot("Sub").Call(Id("start"))).Op("/").Id("float64").Call(Qual("time", "Millisecond")),
 	)
 }
