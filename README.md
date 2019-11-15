@@ -6,6 +6,7 @@
 go build .
 chmod +x ./generator
 ```
+
 ## Generate
 
 ```
@@ -15,6 +16,8 @@ mkdir -p $GOPATH/src/github.com/flootic/graphdb
 
 If you omit the `db` option, then the app will be optimized for
 `sqlite3`
+
+Selecting `postgres` also makes the generated app compatible with cockroach.
 
 ## Run your server
 
