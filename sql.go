@@ -12,22 +12,23 @@ import (
 func CreateSql(p *Package) error {
 	f := NewFile(p.Name)
 
-	AddNewDbFun(f)
-	AddSqlSchemaFun(p.Model, f)
+	AddNewDbFun(p.Database, f)
+	AddSqlSchemaFun(p.Model, p.Database, f)
 
 	return f.Save(p.Filename)
 }
 
 // AddDbFun builds the function that initializes the database
-func AddNewDbFun(f *File) {
+func AddNewDbFun(db string, f *File) {
 
 	funName := "NewDb"
 
-	// For now this code is sqlite3 specific.
-	f.Anon("github.com/mattn/go-sqlite3")
+	f.Anon(DatabaseImport(db))
 
 	f.Comment(fmt.Sprintf("%s initializes a new database handle", funName))
-	f.Func().Id(funName).Params().Parens(List(
+	f.Func().Id(funName).Params(
+		Id("conn").String(),
+	).Parens(List(
 		Op("*").Qual("database/sql", "DB"),
 		Error(),
 	)).Block(
@@ -37,41 +38,77 @@ func AddNewDbFun(f *File) {
 		// the rest of the application should not be aware
 		Return(
 			Id("sql").Dot("Open").Call(
-				Lit("sqlite3"),
-				Lit("file::memory:?cache=shared"),
+				Lit(DatabaseDriver(db)),
+				Id("conn"),
 			),
 		),
 	)
 }
 
+// AddDatabaseImport returns the most appropiate database import package,
+// according to the given db type. Supported types are: sqlite,
+// postgres
+func DatabaseImport(db string) string {
+	switch db {
+	case "postgres":
+		return "github.com/lib/pq"
+	default:
+		return "github.com/mattn/go-sqlite3"
+	}
+}
+
+// DatabaseDriver translates the given database into the real database
+// driver
+func DatabaseDriver(db string) string {
+	switch db {
+	case "postgres":
+		return "postgres"
+	default:
+		return "sqlite3"
+	}
+}
+
 // AddSqlSchemaFun builds the function that returns the list of SQL
 // statements that initialize the database
-func AddSqlSchemaFun(m *Model, f *File) {
+func AddSqlSchemaFun(m *Model, db string, f *File) {
 	funName := "SqlSchema"
 	f.Comment(fmt.Sprintf("%s returns the database Sql schema, as a list of statements", funName))
 	f.Func().Id(funName).Params().Op("[]").Id("string").Block(
 		Return(Op("[]").Id("string").ValuesFunc(func(g *Group) {
 
 			for _, e := range m.Entities {
-				AddEntityDropTable(e, g)
-				AddEntityCreateTable(e, m, g)
-				AddEntityIndices(e, g)
+				AddEntityDropTable(e, db, g)
+				AddEntityCreateTable(e, m, db, g)
 			}
 
-			AddExtraSqlInitialization(g)
+			for _, e := range m.Entities {
+				AddEntityIndices(e, db, g)
+				AddEntityForeignKeyConstraints(e, m, db, g)
+			}
+
+			AddExtraSqlInitialization(db, g)
 		}),
 		))
 }
 
 // AddEntityDropTable adds a DROP TABLE statement to the schema, for the
 // given entity
-func AddEntityDropTable(e *Entity, g *Group) {
-	g.Lit(fmt.Sprintf("DROP TABLE IF EXISTS %s", TableName(e)))
+func AddEntityDropTable(e *Entity, db string, g *Group) {
+	g.Lit(DropTableStatement(e, db))
+}
+
+// DropTableStatement builds a drop table statement for the given entity
+func DropTableStatement(e *Entity, db string) string {
+	str := fmt.Sprintf("DROP TABLE IF EXISTS %s", TableName(e))
+	if db != "sqlite3" {
+		str = fmt.Sprintf("%s CASCADE", str)
+	}
+	return str
 }
 
 // AddEntityCreateTable adds a CREATE TABLE statement to the schema, for
 // the given entity
-func AddEntityCreateTable(e *Entity, m *Model, g *Group) {
+func AddEntityCreateTable(e *Entity, m *Model, db string, g *Group) {
 	chunks := []string{}
 	chunks = append(chunks, fmt.Sprintf("CREATE TABLE %s (", TableName(e)))
 
@@ -85,9 +122,13 @@ func AddEntityCreateTable(e *Entity, m *Model, g *Group) {
 		}
 	}
 
-	for _, r := range e.Relations {
-		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			colsChunks = append(colsChunks, ForeignKeyConstraintFromRelation(r, m))
+	// sqlite3 does not support ALTER table statements,
+	// so we need to inline forein keys inside the table definition
+	if db == "sqlite3" {
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+				colsChunks = append(colsChunks, ForeignKeyConstraintFromRelation(r, m))
+			}
 		}
 	}
 
@@ -97,7 +138,7 @@ func AddEntityCreateTable(e *Entity, m *Model, g *Group) {
 }
 
 // AddEntityIndices generates the database indices for the given table
-func AddEntityIndices(e *Entity, g *Group) {
+func AddEntityIndices(e *Entity, db string, g *Group) {
 	for _, a := range e.Attributes {
 		if a.Name != "ID" && (a.HasModifier("unique") || a.HasModifier("indexed")) {
 
@@ -121,10 +162,33 @@ func AddEntityIndices(e *Entity, g *Group) {
 	}
 }
 
-// AddExtraSqlInitialization adds extra database initialization steps
-func AddExtraSqlInitialization(g *Group) {
-	g.Lit("PRAGMA foreign_keys = ON")
+// AddForeignConstraints builds foreign contraints for the given entity
+func AddEntityForeignKeyConstraints(e *Entity, m *Model, db string, g *Group) {
 
+	tableName := TableName(e)
+
+	if db != "sqlite3" {
+		for _, r := range e.Relations {
+			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+				constraintName := ForeignKeyContraintName(e, r)
+				g.Lit(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s", tableName, constraintName, ForeignKeyConstraintFromRelation(r, m)))
+			}
+		}
+	}
+
+}
+
+// AddExtraSqlInitialization adds extra database initialization steps
+func AddExtraSqlInitialization(db string, g *Group) {
+	switch db {
+	case "sqlite3":
+		g.Lit("PRAGMA foreign_keys = ON")
+		return
+
+	default:
+		return
+
+	}
 }
 
 // TableColumnFromAttribute builds the column specification for the
@@ -147,6 +211,16 @@ func TableColumnFromAttribute(a *Attribute) string {
 // relation.
 func TableColumnFromRelation(r *Relation) string {
 	return fmt.Sprintf("%s %s", RelationColumnName(r), RelationSqlType(r))
+}
+
+// ForeignKeyContraintName returns the name of the foreign key for the
+// given entity and relation
+func ForeignKeyContraintName(e *Entity, r *Relation) string {
+	return fmt.Sprintf("%s_%s",
+		TableName(e),
+		RelationColumnName(r),
+	)
+
 }
 
 // ForeignKeyFromRelation builds the foreign key specification for the

@@ -35,6 +35,7 @@ type Package struct {
 	Name     string
 	Filename string
 	Model    *Model
+	Database string
 }
 
 // ImplementTraits traverses all entities in the model, and for each

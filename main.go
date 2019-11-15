@@ -19,7 +19,7 @@ var (
 func init() {
 	model = flag.String("model", "", "the input model, in yaml format")
 	output = flag.String("output", "", "the output folder")
-	db = flag.String("db", "sqlite3", "the target database")
+	db = flag.String("db", "sqlite3", "the target database type")
 	metrics = flag.Bool("metrics", false, "add Prometheus instrumentation")
 }
 
@@ -65,6 +65,7 @@ func main() {
 		Name:     packageName,
 		Filename: path.Join(*output, "sql.go"),
 		Model:    model,
+		Database: *db,
 	})
 
 	if err != nil {
@@ -138,19 +139,48 @@ func main() {
 func CreateMain(p *Package) error {
 	f := NewFile(p.Name)
 
+	AddVars(f)
+	AddInit(f)
 	AddMainFun(f)
 	return f.Save(p.Filename)
+}
+
+// AddVars builds the variable initialization code for the main program
+func AddVars(f *File) {
+	f.Var().DefsFunc(func(vars *Group) {
+		vars.Id("db").Op("*").String()
+	})
+}
+
+// AddInit builds the init function for the main program
+func AddInit(f *File) {
+	f.Func().Id("init").Params().BlockFunc(func(g *Group) {
+
+		InitFlag("db", "db", "String", "file::memory:?cache=shared", "the database connection string", g)
+	})
+}
+
+// InitFlag builds the code that initializes a flag
+func InitFlag(varName string, flag string, flatType string, defaultValue string, help string, g *Group) {
+	g.Id(varName).Op("=").Qual("flag", flatType).Call(
+		Lit(flag),
+		Lit(defaultValue),
+		Lit(help),
+	)
 }
 
 func AddMainFun(f *File) {
 	funName := "main"
 
 	f.Func().Id(funName).Params().BlockFunc(func(g *Group) {
+		g.Qual("flag", "Parse").Call()
 
 		g.List(
 			Id("db"),
 			Err(),
-		).Op(":=").Id("NewDb").Call()
+		).Op(":=").Id("NewDb").Call(
+			Op("*").Id("db"),
+		)
 		IfErrorLogFatal("Error opening database: %v", g)
 
 		g.Err().Op("=").Id("ExecStatements").Call(

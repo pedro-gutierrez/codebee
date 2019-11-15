@@ -26,6 +26,7 @@ entities:
       - id
     relations:
       - entity: User
+        alias: Member
         modifiers:
           - hasOne
       - entity: Organization

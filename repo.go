@@ -313,12 +313,12 @@ func InsertStatement(e *Entity) string {
 
 	columns := []string{}
 	for _, a := range e.Attributes {
-		columns = append(columns, SingleQuoted(AttributeColumnName(a)))
+		columns = append(columns, AttributeColumnName(a))
 	}
 
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			columns = append(columns, SingleQuoted(RelationColumnName(r)))
+			columns = append(columns, RelationColumnName(r))
 		}
 	}
 
@@ -326,18 +326,26 @@ func InsertStatement(e *Entity) string {
 	chunks = append(chunks, "VALUES")
 
 	placeholders := []string{}
+	i := 1
 	for _, _ = range e.Attributes {
-		placeholders = append(placeholders, "?")
+		placeholders = append(placeholders, placeholder(i))
+		i++
 	}
 
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			placeholders = append(placeholders, "?")
+			placeholders = append(placeholders, placeholder(i))
+			i++
 		}
 	}
 
 	chunks = append(chunks, fmt.Sprintf("(%s)", strings.Join(placeholders, ",")))
 	return strings.Join(chunks, " ")
+}
+
+// placeholder returns a postgres style placeholder
+func placeholder(i int) string {
+	return fmt.Sprintf("$%v", i)
 }
 
 // InsertStatementValues generates the Golang code that populates the
@@ -362,22 +370,25 @@ func UpdateStatement(e *Entity) string {
 	chunks = append(chunks, "SET")
 
 	columns := []string{}
+	i := 1
 	for _, a := range e.Attributes {
 		if a.Name != "ID" {
-			col := fmt.Sprintf("%s=?", AttributeColumnName(a))
+			col := fmt.Sprintf("%s=%s", AttributeColumnName(a), placeholder(i))
+			i++
 			columns = append(columns, col)
 		}
 	}
 
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			col := fmt.Sprintf("%s=?", RelationColumnName(r))
+			col := fmt.Sprintf("%s=%s", RelationColumnName(r), placeholder(i))
+			i++
 			columns = append(columns, col)
 		}
 	}
 
 	chunks = append(chunks, strings.Join(columns, ","))
-	chunks = append(chunks, "WHERE id=?")
+	chunks = append(chunks, fmt.Sprintf("WHERE id=%s", placeholder(i)))
 	return strings.Join(chunks, " ")
 }
 
@@ -407,7 +418,7 @@ func DeleteStatement(e *Entity) string {
 	chunks := []string{}
 	chunks = append(chunks, "DELETE FROM")
 	chunks = append(chunks, TableName(e))
-	chunks = append(chunks, "WHERE id=?")
+	chunks = append(chunks, "WHERE id=$1")
 	return strings.Join(chunks, " ")
 }
 
@@ -441,7 +452,7 @@ func SelectByColumnStatement(e *Entity, a *Attribute) string {
 	chunks = append(chunks, "WHERE")
 	chunks = append(chunks, AttributeColumnName(a))
 	chunks = append(chunks, "=")
-	chunks = append(chunks, "?")
+	chunks = append(chunks, "$1")
 	return strings.Join(chunks, " ")
 }
 
