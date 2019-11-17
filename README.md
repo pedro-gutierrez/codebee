@@ -37,7 +37,11 @@ GraphiQL should be available at: `http://localhost:8080/`
 
 ## Hooks
 
-It is possible to define user defined hooks. For example:
+It is possible to define user defined hooks. This is useful to plugin in
+custom logic before and/or after entities are created, updated or
+deleted.
+
+For example:
 
 ```yaml
 - name: Login
@@ -48,7 +52,7 @@ It is possible to define user defined hooks. For example:
        - after
 ```
 
-This will force you to implement a function named `AfterCreateLogin`.
+This will **force** you to implement a function named `AfterCreateLogin`.
 This can be useful to instruct the server to perform user authentication
 and issue a token:
 
@@ -86,3 +90,6 @@ func AfterCreateLogin(db *sql.DB, l *Login) error {
 
 ```
 
+You will need to implement your hooks in the `main` package. This has
+the advantage of easier pluggability, and in return, you get access to
+all repository functions in the entire model.
