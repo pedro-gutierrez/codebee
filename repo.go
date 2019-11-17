@@ -21,7 +21,7 @@ func CreateRepo(p *Package) error {
 
 	AddExecStatementsFun(f)
 
-	AddRepoFuns(p.Model.Entities, f)
+	AddRepoFuns(p.Model, f)
 
 	return f.Save(p.Filename)
 }
@@ -49,27 +49,42 @@ func ReadFile(g *Group) {
 	g.List(Id("file"), Err()).Op(":=").Qual("io/ioutil", "ReadFile").Call(Id("path"))
 }
 
-// AddRepoFun generates all the repository functions for the Flootic
-// mode, and adds them to the given file
-func AddRepoFuns(entities []*Entity, f *File) {
-	for _, e := range entities {
+// AddRepoFun generates all the repository functions and adds them to the given file
+func AddRepoFuns(m *Model, f *File) {
+	for _, e := range m.Entities {
 
-		AddInsertFun(e, f)
-		AddUpdateFun(e, f)
-		AddDeleteFun(e, f)
-		AddFindFuns(e, f)
+		if e.SupportsOperation("create") {
+
+			AddInsertFun(m, e, f)
+
+		}
+
+		if e.SupportsOperation("update") {
+
+			AddUpdateFun(e, f)
+		}
+
+		if e.SupportsOperation("delete") {
+
+			AddDeleteFun(e, f)
+		}
+
+		if e.SupportsOperation("find") {
+			AddFindFuns(e, f)
+		}
+
 	}
 }
 
 // InsertEntityFunName returns the name of the insert function for the
 // entity
 func InsertEntityFunName(e *Entity) string {
-	return fmt.Sprintf("Insert%s", e.Name)
+	return fmt.Sprintf("Create%s", e.Name)
 }
 
 // AddInsertFun produces the function that inserts the given
 // entity to the database.
-func AddInsertFun(e *Entity, f *File) {
+func AddInsertFun(m *Model, e *Entity, f *File) {
 	funName := InsertEntityFunName(e)
 
 	f.Comment(fmt.Sprintf("%s inserts an entity of type %s to the database", funName, e.Name))
@@ -81,6 +96,8 @@ func AddInsertFun(e *Entity, f *File) {
 		IfErrorReturnEntityAndError(e, g)
 
 		DeferRollbackTransaction(g)
+
+		// insert statement for the entity
 		PrepareTransactionStatement(InsertStatement(e), g)
 		IfErrorReturnEntityAndError(e, g)
 
@@ -358,6 +375,21 @@ func InsertStatementValues(e *Entity, g *Group) {
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
 			g.Id(e.VarName()).Dot(r.Name()).Dot("ID")
+		}
+	}
+}
+
+// InsertStatementValuesForGeneratedRelation generates the Golang code that populates the
+// values to be sent to the INSERT sql statement for the generated
+// relation of the given entity
+func InsertStatementValuesForGeneratedRelation(e *Entity, r *Relation, e2 *Entity, g *Group) {
+	for _, a := range e2.Attributes {
+		g.Id(e.VarName()).Dot(r.Name()).Dot(a.Name)
+	}
+
+	for _, r2 := range e2.Relations {
+		if r2.HasModifier("belongsTo") || r2.HasModifier("hasOne") {
+			g.Id(e.VarName()).Dot(r.Name()).Dot(r2.Name()).Dot("ID")
 		}
 	}
 }

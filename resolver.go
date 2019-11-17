@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	. "github.com/dave/jennifer/jen"
+	"github.com/iancoleman/strcase"
 	"strings"
 )
 
@@ -14,19 +15,32 @@ func CreateResolver(p *Package) error {
 
 		AddTypeResolver(e, f)
 
-		AddCreateMutationResolverFun(e, f)
-		AddUpdateMutationResolverFun(e, f)
-		AddDeleteMutationResolverFun(e, f)
+		if e.SupportsOperation("create") {
 
-		for _, a := range e.Attributes {
-			if a.HasModifier("indexed") && a.HasModifier("unique") {
-				AddFinderByAttributeQueryResolverFun(e, a, f)
-			}
+			AddCreateMutationResolverFun(e, f)
+
 		}
 
-		for _, r := range e.Relations {
-			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-				AddFinderByRelationQueryResolverFun(e, r, f)
+		if e.SupportsOperation("update") {
+			AddUpdateMutationResolverFun(e, f)
+		}
+
+		if e.SupportsOperation("delete") {
+			AddDeleteMutationResolverFun(e, f)
+		}
+
+		if e.SupportsOperation("find") {
+
+			for _, a := range e.Attributes {
+				if a.HasModifier("indexed") && a.HasModifier("unique") {
+					AddFinderByAttributeQueryResolverFun(e, a, f)
+				}
+			}
+
+			for _, r := range e.Relations {
+				if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+					AddFinderByRelationQueryResolverFun(e, r, f)
+				}
 			}
 		}
 	}
@@ -125,19 +139,15 @@ func AddCreateMutationResolverFun(e *Entity, f *File) {
 
 		TimeNow(g)
 
-		g.List(
-			Id(e.VarName()),
-			Err(),
-		).Op(":=").Id(fmt.Sprintf("Insert%s", e.Name)).Call(
-			Id("r").Dot("Db"),
-			Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e))),
-		)
+		g.Id(e.VarName()).Op(":=").Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e)))
 
-		MaybeReturnWrappedErrorAndIncrementCounter(
-			fmt.Sprintf("Error inserting %s", e.Name),
-			CreateMutationErrorCounterName(e),
-			g,
-		)
+		MaybeAddHook(e, "create", "before", g)
+
+		MaybeAddGenerators(e, "create", g)
+
+		AddEntityRepoCall(e, "create", g)
+
+		MaybeAddHook(e, "create", "after", g)
 
 		ObserveDuration(CreateMutationHistogramName(e), g)
 		g.Return(
@@ -158,19 +168,15 @@ func AddUpdateMutationResolverFun(e *Entity, f *File) {
 	ResolverFun(fun, func(g *Group) {
 		TimeNow(g)
 
-		g.List(
-			Id(e.VarName()),
-			Err(),
-		).Op(":=").Id(fmt.Sprintf("Update%s", e.Name)).Call(
-			Id("r").Dot("Db"),
-			Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e))),
-		)
+		g.Id(e.VarName()).Op(":=").Op("&").Id(e.Name).Values(DictFunc(EntityStructFromArgsDictFunc(e)))
 
-		MaybeReturnWrappedErrorAndIncrementCounter(
-			fmt.Sprintf("Error updating %s", e.Name),
-			UpdateMutationErrorCounterName(e),
-			g,
-		)
+		MaybeAddHook(e, "update", "before", g)
+
+		MaybeAddGenerators(e, "update", g)
+
+		AddEntityRepoCall(e, "update", g)
+
+		MaybeAddHook(e, "update", "after", g)
 
 		ObserveDuration(UpdateMutationHistogramName(e), g)
 
@@ -199,7 +205,7 @@ func EntityStructFromArgsDictFunc(e *Entity) func(Dict) {
 		}
 
 		for _, r := range e.Relations {
-			if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
+			if !r.HasModifier("generated") && (r.HasModifier("hasOne") || r.HasModifier("belongsTo")) {
 				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
 					Id("ID"): CastFromGraphqlType(
 						Id("args").Dot(strings.Title(r.Name())),
@@ -220,21 +226,15 @@ func AddDeleteMutationResolverFun(e *Entity, f *File) {
 
 		TimeNow(g)
 
-		g.List(
-			Id(e.VarName()),
-			Err(),
-		).Op(":=").Id(fmt.Sprintf("Delete%s", e.Name)).Call(
-			Id("r").Dot("Db"),
+		g.Id("id").Op(":=").Add(
 			CastFromGraphqlType(Id("args").Dot("Id"), &GraphqlField{
 				DataType: "ID",
 			}),
 		)
 
-		MaybeReturnWrappedErrorAndIncrementCounter(
-			fmt.Sprintf("Error deleting %s", e.Name),
-			DeleteMutationErrorCounterName(e),
-			g,
-		)
+		MaybeAddHook(e, "delete", "before", g)
+		AddEntityRepoCall(e, "delete", g)
+		MaybeAddHook(e, "delete", "after", g)
 
 		ObserveDuration(DeleteMutationHistogramName(e), g)
 
@@ -247,6 +247,51 @@ func AddDeleteMutationResolverFun(e *Entity, f *File) {
 		)
 	}, f)
 
+}
+
+// AddEntityRepoCall adds the code that calls the given repo function.
+// This function infers the right assignments and repo function to call
+// according to conventions
+func AddEntityRepoCall(e *Entity, mutation string, g *Group) {
+
+	// use the right assignment, depending on whether or not
+	// a hook or a generator was previously called
+	op := ":="
+	if HasHook(e, mutation, "before") || (e.HasGenerators() && (mutation == "create" || mutation == "update")) {
+		op = "="
+	}
+
+	varName := e.VarName()
+	if mutation == "delete" {
+		varName = "id"
+	}
+
+	repoFun := EntityRepoFun(e, mutation)
+
+	g.List(
+		Id(e.VarName()),
+		Err(),
+	).Op(op).Id(repoFun).Call(
+		Id("r").Dot("Db"),
+		Id(varName),
+	)
+
+	MaybeReturnWrappedErrorAndIncrementCounter(
+		fmt.Sprintf("Error calling function %s", repoFun),
+		CreateMutationErrorCounterName(e),
+		g,
+	)
+
+}
+
+// EntityRepoFun returns the repo entity to call from the given entity
+// and mutation
+func EntityRepoFun(e *Entity, mutation string) string {
+	return fmt.Sprintf(
+		"%s%s",
+		strcase.ToCamel(mutation),
+		e.Name,
+	)
 }
 
 // AddFinderByAttributeQueryResolverFun defines a resolver function for the given
@@ -506,4 +551,136 @@ func ObserveDuration(histogram string, g *Group) {
 	g.Id(histogram).Dot("Observe").Call(
 		Id("float64").Call(Qual("time", "Now").Call().Dot("Sub").Call(Id("start"))).Op("/").Id("float64").Call(Qual("time", "Millisecond")),
 	)
+}
+
+// MaybeAddHooks adds the code required to run after create hooks
+// for the given entity
+func MaybeAddHook(e *Entity, name string, lifecycle string, g *Group) {
+	if HasHook(e, name, lifecycle) {
+
+		hookFun := HookFunctionName(e, name, lifecycle)
+		g.Err().Op(HookErrorOp(lifecycle)).Id(hookFun).Call(
+			Id("r").Dot("Db"),
+			Id(HookArgumentVarName(e, name, lifecycle)),
+		)
+
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error calling function %s", hookFun),
+			CreateMutationErrorCounterName(e),
+			g,
+		)
+	}
+}
+
+// HasHook returns whether or not the given entity has the given hook
+func HasHook(e *Entity, name string, lifecycle string) bool {
+	if hooks, ok := e.Hooks[name]; ok {
+		for _, h := range hooks {
+			if h == lifecycle {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// HookErrorOp returns the appropriate kind of assignement for the error
+// variable returned by the hook
+func HookErrorOp(lifecycle string) string {
+	if lifecycle == "before" {
+		return ":="
+	} else {
+		return "="
+	}
+}
+
+// HookArgumentVarName returns the name of the variable to be passed to
+// the hook. In the case of create and update function, we have a fully
+// populated entity struct, however, when deleting, we simply have a
+// string id
+func HookArgumentVarName(e *Entity, name string, lifecycle string) string {
+	switch name {
+	case "delete":
+		return "id"
+
+	default:
+		return e.VarName()
+
+	}
+}
+
+// HookFunctionName returns the name of the Golang function for the
+// given hook
+func HookFunctionName(e *Entity, name string, lifecycle string) string {
+	return fmt.Sprintf("%s%s%s",
+		strcase.ToCamel(lifecycle),
+		strcase.ToCamel(name),
+		e.Name,
+	)
+}
+
+// MaybeAddGenerators adds special user defined functions that provide
+// values for generated relations or attributes
+func MaybeAddGenerators(e *Entity, mutation string, g *Group) {
+
+	for _, a := range e.Attributes {
+		if a.HasModifier("generated") {
+			AddGeneratorForAttribute(e, a, mutation, g)
+		}
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("generated") {
+			AddGeneratorForRelation(e, r, mutation, g)
+		}
+	}
+}
+
+// AddGeneratorForAttribute adds the generator code for the given
+// attribute in the context of the given mutation
+func AddGeneratorForAttribute(e *Entity, a *Attribute, mutation string, g *Group) {
+	funName := fmt.Sprintf(
+		"Generate%s%sOn%s",
+		e.Name,
+		a.Name,
+		strcase.ToCamel(mutation),
+	)
+
+	g.List(Id(a.VarName()), Err()).Op(":=").Id(funName).Call(
+		Id("r").Dot("Db"),
+		Id(e.VarName()),
+	)
+
+	MaybeReturnWrappedErrorAndIncrementCounter(
+		fmt.Sprintf("Error calling function %s", funName),
+		CreateMutationErrorCounterName(e),
+		g,
+	)
+
+	g.Id(e.VarName()).Dot(a.Name).Op("=").Id(a.VarName())
+}
+
+// AddGeneratorForRelation adds the generator code for the given
+// relation in the context of the given mutation
+func AddGeneratorForRelation(e *Entity, r *Relation, mutation string, g *Group) {
+	funName := fmt.Sprintf(
+		"Generate%s%sOn%s",
+		e.Name,
+		r.Name(),
+		strcase.ToCamel(mutation),
+	)
+
+	g.List(Id(r.VarName()), Err()).Op(":=").Id(funName).Call(
+		Id("r").Dot("Db"),
+		Id(e.VarName()),
+	)
+
+	MaybeReturnWrappedErrorAndIncrementCounter(
+		fmt.Sprintf("Error calling function %s", funName),
+		CreateMutationErrorCounterName(e),
+		g,
+	)
+
+	g.Id(e.VarName()).Dot(r.Name()).Op("=").Id(r.VarName())
 }

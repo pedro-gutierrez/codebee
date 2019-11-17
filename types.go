@@ -26,6 +26,7 @@ func ReadModelFromFile(path string) (*Model, error) {
 	err = yaml.Unmarshal(yamlFile, m)
 	m.ImplementTraits()
 	m.ResolveTypes()
+	m.ResolveOperations()
 	return m, err
 }
 
@@ -44,6 +45,15 @@ type Package struct {
 func (m *Model) ImplementTraits() {
 	for _, e := range m.Entities {
 		e.ImplementTraits()
+	}
+}
+
+// ResolveOperations traverses all entities in the model, and for each
+// entity, it inspects the operations. If no operations are defined,
+// then by default we assign create, update, delete and find.
+func (m *Model) ResolveOperations() {
+	for _, e := range m.Entities {
+		e.ResolveOperations()
 	}
 }
 
@@ -141,6 +151,8 @@ type Entity struct {
 	Attributes []*Attribute
 	Relations  []*Relation
 	Traits     []string
+	Hooks      map[string][]string
+	Operations []string
 }
 
 // VarName returns the variable name representation for the
@@ -154,6 +166,40 @@ func (e *Entity) VarName() string {
 // the user (to be implemented)
 func (e *Entity) Plural() string {
 	return fmt.Sprintf("%ss", e.Name)
+}
+
+var entityOps = []string{
+	"create", "update", "delete", "find",
+}
+
+// ResolveOperations ensures that the entity has a valid set of
+// operations defined
+func (e *Entity) ResolveOperations() {
+	if len(e.Operations) == 0 {
+		e.Operations = entityOps
+		return
+	}
+
+	// check we have configured valid operations
+	ops := strings.Join(entityOps, ",")
+	for _, op := range e.Operations {
+		if !strings.Contains(ops, op) {
+			panic(fmt.Sprintf("Invalid operation %s in %s", op, e.Name))
+		}
+
+	}
+}
+
+// SupportsOperation returns whether the given operation is supported by
+// the entity
+func (e *Entity) SupportsOperation(op string) bool {
+	for _, o := range e.Operations {
+		if o == op {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ImplementTraits translates the entity traits into the appropriate
@@ -267,6 +313,25 @@ func (e *Entity) PreferredSort() *Attribute {
 	return &Attribute{Name: "ID"}
 }
 
+// HasGenerators returns whether or not this entity has generated
+// attributes or relations
+func (e *Entity) HasGenerators() bool {
+
+	for _, a := range e.Attributes {
+		if a.HasModifier("generated") {
+			return true
+		}
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("generated") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // EntityInitialization builds the initialization of a new entity struct
 // pointer for the given entity
 func EntityInitialization(e *Entity) *Statement {
@@ -376,7 +441,7 @@ func (r *Relation) WithModifiers(mods []string) *Relation {
 // VarName returns the variable name representation for the
 // relation
 func (r *Relation) VarName() string {
-	return fmt.Sprintf("%sId", strings.ToLower(r.Name()))
+	return fmt.Sprintf("%s", strings.ToLower(r.Name()))
 }
 
 // HasModifier returns true, if the relation has the given modifier

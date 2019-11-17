@@ -47,6 +47,22 @@ entities:
         type: String
         modifiers:
           - hashed
+  - name: Login
+    operations:
+      - create
+      - find
+    traits:
+      - id
+    attributes:
+      - name: Username
+        type: String
+      - name: Password
+        type: String
+        modifiers:
+          - hashed
+    hooks:
+      create:
+        - after
   - name: Token
     traits:
       - id
@@ -56,6 +72,10 @@ entities:
         type: Int
       - name: Permissions
         type: String
+    relations:
+      - entity: Login
+        modifiers:
+          - belongsTo
   - name: Address
     traits:
       - id

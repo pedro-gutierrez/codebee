@@ -47,19 +47,31 @@ func BuildSchema(m *Model) string {
 	for _, e := range m.Entities {
 		s.Types = append(s.Types, GraphqlSchemaTypeFromEntity(e))
 
-		s.Mutations = append(s.Mutations, GraphqlCreateMutationFromEntity(e))
-		s.Mutations = append(s.Mutations, GraphqlUpdateMutationFromEntity(e))
-		s.Mutations = append(s.Mutations, GraphqlDeleteMutationFromEntity(e))
-
-		for _, a := range e.Attributes {
-			if a.HasModifier("indexed") && a.HasModifier("unique") {
-				s.Queries = append(s.Queries, GraphqlFinderQueryFromAttribute(e, a))
-			}
+		if e.SupportsOperation("create") {
+			s.Mutations = append(s.Mutations, GraphqlCreateMutationFromEntity(e))
 		}
-		for _, r := range e.Relations {
-			if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
-				s.Queries = append(s.Queries, GraphqlFinderQueryFromRelation(e, r))
+
+		if e.SupportsOperation("update") {
+			s.Mutations = append(s.Mutations, GraphqlUpdateMutationFromEntity(e))
+		}
+
+		if e.SupportsOperation("delete") {
+			s.Mutations = append(s.Mutations, GraphqlDeleteMutationFromEntity(e))
+
+		}
+
+		if e.SupportsOperation("find") {
+			for _, a := range e.Attributes {
+				if a.HasModifier("indexed") && a.HasModifier("unique") {
+					s.Queries = append(s.Queries, GraphqlFinderQueryFromAttribute(e, a))
+				}
 			}
+			for _, r := range e.Relations {
+				if r.HasModifier("hasOne") || r.HasModifier("belongsTo") {
+					s.Queries = append(s.Queries, GraphqlFinderQueryFromRelation(e, r))
+				}
+			}
+
 		}
 	}
 
@@ -101,10 +113,12 @@ func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 	}
 
 	for _, r := range e.Relations {
-		f := GraphqlFieldFromRelation(r)
-		f.DataType = "ID"
+		if !r.HasModifier("generated") {
+			f := GraphqlFieldFromRelation(r)
+			f.DataType = "ID"
 
-		m.Args = append(m.Args, f)
+			m.Args = append(m.Args, f)
+		}
 	}
 
 	return m
@@ -127,10 +141,12 @@ func GraphqlUpdateMutationFromEntity(e *Entity) *GraphqlFun {
 	}
 
 	for _, r := range e.Relations {
-		f := GraphqlFieldFromRelation(r)
-		f.DataType = "ID"
+		if !r.HasModifier("generated") {
+			f := GraphqlFieldFromRelation(r)
+			f.DataType = "ID"
 
-		m.Args = append(m.Args, f)
+			m.Args = append(m.Args, f)
+		}
 	}
 
 	return m
