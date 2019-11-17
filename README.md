@@ -37,8 +37,9 @@ GraphiQL should be available at: `http://localhost:8080/`
 
 ## Hooks
 
-It is possible to define user defined hooks. This is useful to plugin in
-custom logic before and/or after entities are created, updated or
+It is possible to add custom logic via user defined hooks. 
+
+This is useful to plugin in application behavior before and/or after entities are created, updated or
 deleted.
 
 For example:
@@ -53,7 +54,7 @@ For example:
 ```
 
 This will **force** you to implement a function named `AfterCreateLogin`.
-This can be useful to instruct the server to perform user authentication
+This can be useful to instruct the server to perform user credentials verification,
 and issue a token:
 
 ```go
@@ -93,3 +94,7 @@ func AfterCreateLogin(db *sql.DB, l *Login) error {
 You will need to implement your hooks in the `main` package. This has
 the advantage of easier pluggability, and in return, you get access to
 all repository functions in the entire model.
+
+A `before` hook could also be defined, for example, in order to check of the current load in the system, and deny the login request for that user, or all users. If the hook returns an error, the flow is interrumpted and returned immediately. 
+
+This hooks feature opens the door for many features, such as congestion control, back pressure, security, traceability and real, loosely coupled microservice architectures based on streams, by publishing to NATS using `after` hooks.
