@@ -33,3 +33,56 @@ memory sqlite3 database. The project must be built for sqlite3.
 ## Test
 
 GraphiQL should be available at: `http://localhost:8080/`
+
+
+## Hooks
+
+It is possible to define user defined hooks. For example:
+
+```yaml
+- name: Login
+  attributes:
+    ...
+  hooks:
+    create:
+       - after
+```
+
+This will force you to implement a function named `AfterCreateLogin`.
+This can be useful to instruct the server to perform user authentication
+and issue a token:
+
+```go
+package main
+
+import (
+    "database/sql"
+    "errors"
+)
+
+// AfterCreateLogin is a user defined hook that creates a token, or
+// returns a login error
+func AfterCreateLogin(db *sql.DB, l *Login) error {
+
+    // Look for the user. If no user was found, or the password
+    // does not match, then return an error
+    // TODO: check hashed passwords
+    creds, err := FindCredentialsByUsername(db, l.Username)
+    if err != nil || creds == nil || creds.Password != l.Password {
+        return errors.New("Invalid login")
+    }
+
+    // Create a token and persist into the Database
+    _, err = CreateToken(db, &Token{
+        Expires:     3600,
+        Permissions: "*",
+        ID:          l.ID,
+        Login:       l,
+        Owner:       creds.Owner,
+    })
+
+    return err
+}
+
+```
+
