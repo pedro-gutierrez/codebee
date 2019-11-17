@@ -39,7 +39,7 @@ GraphiQL should be available at: `http://localhost:8080/`
 
 It is possible to add custom logic via user defined hooks. 
 
-This is useful to plugin in application behavior before and/or after entities are created, updated or
+This is useful to plugin application behavior in, before and/or after entities are created, updated or
 deleted.
 
 For example:
@@ -54,7 +54,7 @@ For example:
 ```
 
 This will **force** you to implement a function named `AfterCreateLogin`.
-This can be useful to instruct the server to perform user credentials verification,
+The following example instructs the server to perform user credentials verification,
 and issue a token:
 
 ```go
@@ -66,7 +66,11 @@ import (
 )
 
 // AfterCreateLogin is a user defined hook that creates a token, or
-// returns a login error
+// returns a login error. In an after hook, the entity involved has
+// already been persisted to the database, so it is possible to link
+// extra resources to it.
+//
+// TODO: make this part of a database transaction
 func AfterCreateLogin(db *sql.DB, l *Login) error {
 
     // Look for the user. If no user was found, or the password
