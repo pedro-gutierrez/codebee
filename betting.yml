@@ -3,6 +3,7 @@ entities:
     traits:
       - id
   - name: Identity
+    plural: Identities
     traits:
       - id
     attributes:

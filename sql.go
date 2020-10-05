@@ -240,7 +240,7 @@ func TablePrefix() string {
 
 // TableName builds a SQL table name, for the given entity
 func TableName(e *Entity) string {
-	return strings.ToLower(strcase.ToSnake(fmt.Sprintf("%s%s", TablePrefix(), e.Plural())))
+	return strings.ToLower(strcase.ToSnake(fmt.Sprintf("%s%s", TablePrefix(), e.PluralName() )))
 }
 
 // ColumnName

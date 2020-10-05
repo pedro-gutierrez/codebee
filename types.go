@@ -150,6 +150,7 @@ type UDType struct {
 type Entity struct {
 	Name       string
 	Variable   string
+	Plural     string
 	Attributes []*Attribute
 	Relations  []*Relation
 	Traits     []string
@@ -167,10 +168,13 @@ func (e *Entity) VarName() string {
 	return VarName(name)
 }
 
-// Plural returns the plural name for the given entity. This function
+// PluralName returns the plural name for the given entity. This function
 // appends an 's' to the entity name, unless the plural is overriden by
-// the user (to be implemented)
-func (e *Entity) Plural() string {
+// the user
+func (e *Entity) PluralName() string {
+	if len(e.Plural) > 0 {
+		return e.Plural
+	}
 	return fmt.Sprintf("%ss", e.Name)
 }
 

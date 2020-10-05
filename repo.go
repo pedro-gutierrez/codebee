@@ -238,7 +238,7 @@ func AddFindByAttributeFun(e *Entity, a *Attribute, f *File) {
 // FindEntityByRelationFunName returns the name of the finder function for the given
 // entity and relation
 func FindEntityByRelationFunName(e *Entity, r *Relation) string {
-	return fmt.Sprintf("Find%sBy%s", e.Plural(), r.Name())
+	return fmt.Sprintf("Find%sBy%s", e.PluralName() , r.Name())
 }
 
 // AddFindByRelationFun produces a finder function for the given entity
@@ -251,7 +251,7 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 	// function body
 	ifErrReturn := If(Err().Op("!=").Nil()).Block(
 		Return(
-			Id(VarName(e.Plural())),
+			Id(VarName(e.PluralName() )),
 			Err(),
 		),
 	)
@@ -266,7 +266,7 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 		Op("[]").Op("*").Id(e.Name),
 		Error(),
 	)).BlockFunc(func(g *Group) {
-		g.Id(VarName(e.Plural())).Op(":=").Op("[]").Op("*").Id(e.Name).Values(Dict{})
+		g.Id(VarName(e.PluralName() )).Op(":=").Op("[]").Op("*").Id(e.Name).Values(Dict{})
 
 		g.List(
 			Id("stmt"),
@@ -308,11 +308,11 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 			))
 
 			g2.Add(ifErrReturn)
-			g2.Id(VarName(e.Plural())).Op("=").Append(Id(VarName(e.Plural())), Id(e.VarName()))
+			g2.Id(VarName(e.PluralName() )).Op("=").Append(Id(VarName(e.PluralName() )), Id(e.VarName()))
 		})
 
 		g.Return(List(
-			Id(VarName(e.Plural())),
+			Id(VarName(e.PluralName() )),
 			Nil(),
 		))
 	})

@@ -343,9 +343,9 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 		TimeNow(g)
 
 		g.List(
-			Id(VarName(e.Plural())),
+			Id(VarName(e.PluralName() )),
 			Err(),
-		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.Plural(), r.Name())).Call(
+		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.PluralName() , r.Name())).Call(
 			Id("r").Dot("Db"),
 			CastFromGraphqlType(
 				Id("args").Dot(r.Name()),
@@ -367,7 +367,7 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 			List(
 				Id("_"),
 				Id(e.VarName()),
-			).Op(":=").Range().Id(VarName(e.Plural())),
+			).Op(":=").Range().Id(VarName(e.PluralName() )),
 		).BlockFunc(func(g2 *Group) {
 
 			g2.Id("resolvers").Op("=").Append(

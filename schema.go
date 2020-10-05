@@ -253,7 +253,7 @@ func GraphqlFindByAttributeQueryName(e *Entity, a *Attribute) string {
 // GraphqlFindByAttributeQueryName returns the name of the query that
 // find instances of the given entity by the given attribute
 func GraphqlFindByRelationQueryName(e *Entity, r *Relation) string {
-	return fmt.Sprintf("find%sBy%s", e.Plural(), r.Name())
+	return fmt.Sprintf("find%sBy%s", e.PluralName() , r.Name())
 }
 
 // GraphqlFinderQueryByID is a convenience function representation that
