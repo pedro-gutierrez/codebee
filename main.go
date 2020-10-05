@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	. "github.com/dave/jennifer/jen"
-	"golang.org/x/sys/unix"
 	"log"
 	"path"
+
+	. "github.com/dave/jennifer/jen"
+	"golang.org/x/sys/unix"
 )
 
 var (

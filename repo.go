@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	. "github.com/dave/jennifer/jen"
 	"strings"
+
+	. "github.com/dave/jennifer/jen"
 )
 
 // CreateRepo generates a Golang file that contains all the necessary
@@ -12,7 +13,7 @@ import (
 func CreateRepo(p *Package) error {
 	f := NewFile(p.Name)
 
-	f.PackageComment(fmt.Sprintf("%s contains all the library code for the Flootic platform", p.Name))
+	f.PackageComment(fmt.Sprintf("%s contains all the library code for the platform", p.Name))
 	f.PackageComment("This file contains all the functions that implement the Database repository")
 	f.PackageComment(" ** THIS CODE IS MACHINE GENERATED. DO NOT EDIT MANUALLY ** ")
 

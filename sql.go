@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	. "github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
-	"strings"
 )
 
 // CreateSql generates the Golang module that produces the necessary SQL
@@ -223,7 +224,7 @@ func ForeignKeyContraintName(e *Entity, r *Relation) string {
 
 }
 
-// ForeignKeyFromRelation builds the foreign key specification for the
+// ForeignKeyConstraintFromRelation builds the foreign key specification for the
 // given relation
 func ForeignKeyConstraintFromRelation(r *Relation, m *Model) string {
 	e := m.EntityForNameOrPanic(r.Entity)
@@ -231,9 +232,15 @@ func ForeignKeyConstraintFromRelation(r *Relation, m *Model) string {
 	return fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s(%s)", RelationColumnName(r), TableName(e), "id")
 }
 
+// TablePrefix returns a prefix for all sql tables. For now
+// we don't set a prefix.
+func TablePrefix() string {
+	return ""
+}
+
 // TableName builds a SQL table name, for the given entity
 func TableName(e *Entity) string {
-	return strings.ToLower(strcase.ToSnake(fmt.Sprintf("%s%s", "Fl", e.Plural())))
+	return strings.ToLower(strcase.ToSnake(fmt.Sprintf("%s%s", TablePrefix(), e.Plural())))
 }
 
 // ColumnName
@@ -241,8 +248,11 @@ func AttributeColumnName(a *Attribute) string {
 	return strings.ToLower(strcase.ToSnake(a.Name))
 }
 
+// RelationColumnName returns the column name for a given
+// relation. The name of the relation is convereted to snake case
+// and we append the _id suffix.
 func RelationColumnName(r *Relation) string {
-	return strings.ToLower(strcase.ToSnake(r.Name()))
+	return fmt.Sprintf("%s_id", strings.ToLower(strcase.ToSnake(r.Name())))
 }
 
 // AttributeSqlType returns the SQL datatype for an attribute.

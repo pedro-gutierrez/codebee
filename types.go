@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	. "github.com/dave/jennifer/jen"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"strings"
+
+	. "github.com/dave/jennifer/jen"
+	"gopkg.in/yaml.v2"
 )
 
-// Model describes the Flootic application model
+// Model describes the application model
 type Model struct {
 	Types    []*UDType
 	Entities []*Entity
@@ -148,6 +149,7 @@ type UDType struct {
 //
 type Entity struct {
 	Name       string
+	Variable   string
 	Attributes []*Attribute
 	Relations  []*Relation
 	Traits     []string
@@ -158,7 +160,11 @@ type Entity struct {
 // VarName returns the variable name representation for the
 // relation
 func (e *Entity) VarName() string {
-	return VarName(e.Name)
+	name := e.Name
+	if len(e.Variable) > 0 {
+		name = e.Variable
+	}
+	return VarName(name)
 }
 
 // Plural returns the plural name for the given entity. This function
@@ -263,13 +269,13 @@ func (e *Entity) AddAttribute(n string, t string, m []string) {
 	e.Attribute(n).WithType(t).WithModifiers(m)
 }
 
-// AddAttribute is a convenience function that adds an aliased relation
+// AddRelation is a convenience function that adds an aliased relation
 // to the given entity
 func (e *Entity) AddRelation(a string, entity string, m []string) {
 	e.AliasedRelation(a).WithEntity(entity).WithModifiers(m)
 }
 
-// Adds a new attribute with the given name to the entity
+// Attribute adds a new attribute with the given name to the entity
 func (e *Entity) Attribute(name string) *Attribute {
 	a := &Attribute{
 		Name: name,

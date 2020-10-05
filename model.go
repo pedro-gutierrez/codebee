@@ -12,7 +12,7 @@ import (
 func CreateModel(p *Package) error {
 	f := NewFile(p.Name)
 
-	f.PackageComment(fmt.Sprintf("%s contains all the library code for the Flootic platform", p.Name))
+	f.PackageComment(fmt.Sprintf("%s contains all the library code for the platform", p.Name))
 	f.PackageComment("This file contains all the functions that implement the model")
 	f.PackageComment(" ** THIS CODE IS MACHINE GENERATED. DO NOT EDIT MANUALLY ** ")
 
@@ -21,7 +21,7 @@ func CreateModel(p *Package) error {
 	return f.Save(p.Filename)
 }
 
-// AddModelStructs generates all the structs of the Flootic
+// AddModelStructs generates all the structs from the
 // model, and adds them to the given file
 func AddModelStructs(entities []*Entity, f *File) {
 	for _, e := range entities {

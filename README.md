@@ -1,30 +1,48 @@
-# Flootic GraphDB generator
+# Codebee
+
+A GraphQL API and Database generator written in Go.
+
 
 ## Build
 
+Build the `codebee` binary:
+
 ```
 go build .
-chmod +x ./generator
+chmod +x ./codebee
 ```
+
+## Write a model
+
+See `betting.yml` to get an idea of what a model looks like
 
 ## Generate
 
 ```
-mkdir -p $GOPATH/src/github.com/flootic/graphdb
-./generator --db=postgres --model=flootic.yml --output=$GOPATH/src/github.com/flootic/graphdb
+mkdir -p ~/Projects/betting
+./codebee --db=postgres --model=betting.yml --output=~/Projects/betting
 ```
 
 If you omit the `db` option, then the app will be optimized for
 `sqlite3`
 
-Selecting `postgres` also makes the generated app compatible with cockroach.
+Selecting `postgres` also makes the generated app compatible with CockroachDB.
+
+## Create your database
+
+Assuming you have Postgres up and running:
+
+```
+createuser betting
+createdb betting -O betting
+```
 
 ## Run your server
 
 ```
-cd $GOPATH/src/github.com/flootic/graphdb
+cd ~/Projects/betting
 go get
-go run . -db=postgres://localhost/flootic?sslmode=disable
+go run . -db=postgres://betting@localhost/betting?sslmode=disable
 ```
 
 If you omit the `db` option, then the app will attempt to start an in
