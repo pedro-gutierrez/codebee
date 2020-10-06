@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	. "github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
 )
@@ -38,6 +39,8 @@ func AddMetrics(p *Package, f *File) {
 				}
 			}
 
+			DefineMetricsForFinderForAll(e, vars)
+
 		}
 	})
 }
@@ -67,6 +70,8 @@ func AddMetricsRegistrations(p *Package, f *File) {
 					RegisterMetricsForFinderByRelation(e, r, g)
 				}
 			}
+
+			RegisterMetricsForFinderForAll(e, g)
 
 		}
 
@@ -210,12 +215,43 @@ func DefineMetricsForFinderByRelation(e *Entity, r *Relation, vars *Group) {
 	)
 }
 
+// DefineMetricsForFinderForAll defines the histograms and counters
+// that will hold metrics when find all instances of the given
+// entity
+func DefineMetricsForFinderForAll(e *Entity, vars *Group) {
+
+	// an histogram, to track latencies
+	vars.Id(FindAllQueryHistogramName(e)).Op("=").Add(
+		HistogramDefinition(
+			FindAllQueryHistogramName(e),
+			FindAllQueryHistogramHelp(e),
+		),
+	)
+
+	// a counter, to track errors
+	vars.Id(FindAllQueryErrorCounterName(e)).Op("=").Add(
+		CounterDefinition(
+			FindAllQueryErrorCounterName(e),
+			FindAllQueryErrorCounterHelp(e),
+		),
+	)
+
+}
+
 // RegisterMetricsForFinderByRelation defines the histograms and counters
 // that will hold metrics when finding instances of the given entity by
 // the given relation
 func RegisterMetricsForFinderByRelation(e *Entity, r *Relation, g *Group) {
 	RegisterMetric(FindByRelationQueryHistogramName(e, r), g)
 	RegisterMetric(FindByRelationQueryErrorCounterName(e, r), g)
+}
+
+// RegisterMetricsForFinderForAll registers the histograms and counters
+// that will hold metrics when findind all instances of a given
+// entity
+func RegisterMetricsForFinderForAll(e *Entity, g *Group) {
+	RegisterMetric(FindAllQueryHistogramName(e), g)
+	RegisterMetric(FindAllQueryErrorCounterName(e), g)
 }
 
 // CreateMutationHistogramName returns the variable name of the metric that
@@ -252,7 +288,7 @@ func CreateMutationErrorCounterHelp(e *Entity) string {
 	return fmt.Sprintf("Errors when creating entities of type %s", e.Name)
 }
 
-// UpdateMutationHistogramVar returns the variable name of the metric that
+// UpdateMutationHistogramName returns the variable name of the metric that
 // observes latencies for the update mutation for the given entity
 func UpdateMutationHistogramName(e *Entity) string {
 	return strcase.ToSnake(
@@ -332,14 +368,14 @@ func FindByAttributeQueryHistogramName(e *Entity, a *Attribute) string {
 	)
 }
 
-// FindByAttributeHistogramHelp returns the help for the metric that
+// FindByAttributeQueryHistogramHelp returns the help for the metric that
 // keeps track of latencies for the finder query for the given entity by
 // the given attribute
 func FindByAttributeQueryHistogramHelp(e *Entity, a *Attribute) string {
 	return fmt.Sprintf("Elapsed time in milliseconds to find entties of type %s by %s", e.Name, a.Name)
 }
 
-// FindByAttributeErrorQueryCounterName returns the name of the metric that
+// FindByAttributeQueryErrorCounterName returns the name of the metric that
 // counts errors for the finder query for the given entity and attribute
 func FindByAttributeQueryErrorCounterName(e *Entity, a *Attribute) string {
 	return strcase.ToSnake(
@@ -372,7 +408,7 @@ func FindByRelationQueryHistogramName(e *Entity, r *Relation) string {
 // keeps track of latencies for the finder query for the given entity by
 // the given relation
 func FindByRelationQueryHistogramHelp(e *Entity, r *Relation) string {
-	return fmt.Sprintf("Elapsed time in milliseconds to find entities of type %s by %s", e.Name, r.Name())
+	return fmt.Sprintf("Elapsed time in milliseconds to find entities of type %s by %s", e.Name, r.Alias())
 }
 
 // FindByRelationQueryErrorCounterName returns the name of the metric that
@@ -389,7 +425,44 @@ func FindByRelationQueryErrorCounterName(e *Entity, r *Relation) string {
 // FindByRelationQueryErrorCounterHelp returns the help for the metric that
 // counts errors for the finder query for the given entity and attribute
 func FindByRelationQueryErrorCounterHelp(e *Entity, r *Relation) string {
-	return fmt.Sprintf("Errors when finding entities of type %s by %s", e.Name, r.Name())
+	return fmt.Sprintf("Errors when finding entities of type %s by %s", e.Name, r.Alias())
+}
+
+// FindAllQueryHistogramName returns the variable name of the metric that
+// observes latencies for the finder query that returns all instances
+// of a given entity
+func FindAllQueryHistogramName(e *Entity) string {
+	return strcase.ToSnake(
+		fmt.Sprintf("%s%s",
+			GraphqlFindAllQueryName(e),
+			"Latencies",
+		),
+	)
+}
+
+// FindAllQueryHistogramHelp returns the help for the metric that
+// observes latencies for the finder query that returns all instances
+// of a given entity
+func FindAllQueryHistogramHelp(e *Entity) string {
+	return fmt.Sprintf("Elapsed time in milliseconds to find all entities of type %s", e.Name)
+}
+
+// FindAllQueryErrorCounterName returns the name of the metric that
+// counts errors for the finder query that returns all
+// instances of a given entity
+func FindAllQueryErrorCounterName(e *Entity) string {
+	return strcase.ToSnake(
+		fmt.Sprintf("%s%s",
+			GraphqlFindAllQueryName(e),
+			"Errors",
+		),
+	)
+}
+
+// FindAllQueryErrorCounterHelp returns the help for the metric that
+// counts errors for the finder query for the given entity
+func FindAllQueryErrorCounterHelp(e *Entity) string {
+	return fmt.Sprintf("Errors when finding all entities of type %s", e.Name)
 }
 
 // HistogramDefinition returns the code required to produce a new

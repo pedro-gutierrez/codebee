@@ -1,0 +1,51 @@
+entities:
+  - name: Address
+    plural: Addresses
+    traits:
+      - id
+    attributes:
+      - name: Street
+        type: String
+      - name: Country
+        type: String
+  - name: Shipment
+    traits:
+      - id
+    relations:
+      - entity: Address
+        name: Pickup
+        modifiers:
+          - belongsTo
+      - entity: Address
+        name: Delivery 
+        modifiers:
+          - belongsTo
+      - entity: Package
+        modifiers:
+          - hasMany
+    attributes:
+      - name: Status
+        type: ShipmentStatus
+  - name: Package
+    variable: pkg
+    traits:
+      - id
+    relations:
+      - entity: Shipment
+        modifiers:
+          - belongsTo
+    attributes:
+      - name: Number
+        type: Int
+      - name: Contents
+        type: String
+      - name: Dangerous
+        type: Boolean
+types:
+  - name: ShipmentStatus
+    type: String
+    values:
+      - planning
+      - waiting
+      - intransit
+      - delivered

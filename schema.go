@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	. "github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
-	"strings"
 )
 
 // CreateSchema generates a Golang file that produces the Graphql schema
@@ -72,6 +73,8 @@ func BuildSchema(m *Model) string {
 				}
 			}
 
+			s.Queries = append(s.Queries, GraphqlFinderQueryForAll(e))
+
 		}
 	}
 
@@ -113,7 +116,7 @@ func GraphqlCreateMutationFromEntity(e *Entity) *GraphqlFun {
 	}
 
 	for _, r := range e.Relations {
-		if !r.HasModifier("generated") {
+		if !r.HasModifier("generated") && !r.HasModifier("hasMany") {
 			f := GraphqlFieldFromRelation(r)
 			f.DataType = "ID"
 
@@ -141,7 +144,7 @@ func GraphqlUpdateMutationFromEntity(e *Entity) *GraphqlFun {
 	}
 
 	for _, r := range e.Relations {
-		if !r.HasModifier("generated") {
+		if !r.HasModifier("generated") && !r.HasModifier("hasMany") {
 			f := GraphqlFieldFromRelation(r)
 			f.DataType = "ID"
 
@@ -167,6 +170,35 @@ func GraphqlDeleteMutationFromEntity(e *Entity) *GraphqlFun {
 	m.Args = append(m.Args, &GraphqlField{
 		Name:     "id",
 		DataType: "ID",
+		Required: true,
+		Many:     false,
+	})
+
+	return m
+}
+
+// GraphqlFinderQueryForAll returns a query that finds
+// all instances of an entity.
+func GraphqlFinderQueryForAll(e *Entity) *GraphqlFun {
+	m := &GraphqlFun{
+		Name: GraphqlFindAllQueryName(e),
+		Returns: &GraphqlField{
+			DataType: e.Name,
+			Required: false,
+			Many:     true,
+		},
+	}
+
+	m.Args = append(m.Args, &GraphqlField{
+		Name:     "Limit",
+		DataType: "Int",
+		Required: true,
+		Many:     false,
+	})
+
+	m.Args = append(m.Args, &GraphqlField{
+		Name:     "Offset",
+		DataType: "Int",
 		Required: true,
 		Many:     false,
 	})
@@ -203,7 +235,7 @@ func GraphqlFinderQueryFromRelation(e *Entity, r *Relation) *GraphqlFun {
 	}
 
 	m.Args = append(m.Args, &GraphqlField{
-		Name:     r.Name(),
+		Name:     r.Alias(),
 		DataType: "ID",
 		Required: true,
 		Many:     false,
@@ -244,16 +276,22 @@ func GraphqlDeleteMutationName(e *Entity) string {
 	return fmt.Sprintf("delete%s", e.Name)
 }
 
+// GraphqlFindAllQueryName returns the name of the query
+// that finds all instances of the given entity
+func GraphqlFindAllQueryName(e *Entity) string {
+	return fmt.Sprintf("findAll%s", e.PluralName())
+}
+
 // GraphqlFindByAttributeQueryName returns the name of the query that
 // find instances of the given entity by the given attribute
 func GraphqlFindByAttributeQueryName(e *Entity, a *Attribute) string {
 	return fmt.Sprintf("find%sBy%s", e.Name, a.Name)
 }
 
-// GraphqlFindByAttributeQueryName returns the name of the query that
+// GraphqlFindByRelationQueryName returns the name of the query that
 // find instances of the given entity by the given attribute
 func GraphqlFindByRelationQueryName(e *Entity, r *Relation) string {
-	return fmt.Sprintf("find%sBy%s", e.PluralName() , r.Name())
+	return fmt.Sprintf("find%sBy%s", e.PluralName(), r.Alias())
 }
 
 // GraphqlFinderQueryByID is a convenience function representation that
@@ -263,6 +301,17 @@ func GraphqlFinderQueryByID(e *Entity) *GraphqlFun {
 		Name: "ID",
 		Type: "ID",
 	})
+}
+
+// GraphqlFinderQueryByParent is a convenience function representation
+// that models a lookup of a collection of entities by a parent
+// id
+func GraphqlFinderQueryByParent(e *Entity, r *Relation) *GraphqlFun {
+	return GraphqlFinderQueryFromAttribute(e, &Attribute{
+		Name: r.Alias(),
+		Type: "ID",
+	})
+
 }
 
 // GraphqlSchema is an internal simplified Graphql model
@@ -458,7 +507,7 @@ func GraphqlInputFieldFromRelation(r *Relation) *GraphqlField {
 // RelationGraphqlFieldName returns the Graphql field name for the
 // given relation
 func RelationGraphqlFieldName(r *Relation) string {
-	return strcase.ToLowerCamel(r.Name())
+	return strcase.ToLowerCamel(r.Alias())
 }
 
 // RelationGraphqlFieldDatatype returns the Graphql field type for the

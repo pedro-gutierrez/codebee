@@ -28,6 +28,7 @@ func ReadModelFromFile(path string) (*Model, error) {
 	m.ImplementTraits()
 	m.ResolveTypes()
 	m.ResolveOperations()
+	m.ResolveRelations()
 	return m, err
 }
 
@@ -55,6 +56,17 @@ func (m *Model) ImplementTraits() {
 func (m *Model) ResolveOperations() {
 	for _, e := range m.Entities {
 		e.ResolveOperations()
+	}
+}
+
+// ResolveRelations traverses all relations and
+// resolves the variable name for each relation.
+func (m *Model) ResolveRelations() {
+	for _, e := range m.Entities {
+		for _, r := range e.Relations {
+			r.Variable = r.ResolveVariable(m)
+			r.Name = r.ResolveAlias(m)
+		}
 	}
 }
 
@@ -292,7 +304,7 @@ func (e *Entity) Attribute(name string) *Attribute {
 // AliasedRelation adds a new relation with the given alias to the entity
 func (e *Entity) AliasedRelation(name string) *Relation {
 	r := &Relation{
-		Alias: name,
+		Name: name,
 	}
 
 	e.Relations = append(e.Relations, r)
@@ -342,6 +354,18 @@ func (e *Entity) HasGenerators() bool {
 	return false
 }
 
+// RelationForEntityOrPanic looks for a relation that has
+// the given entity as target entity.
+func (e *Entity) RelationForEntityOrPanic(target *Entity) *Relation {
+	for _, r := range e.Relations {
+		if r.Entity == target.Name {
+			return r
+		}
+	}
+
+	panic(fmt.Sprintf("No relation with type %s in entity %s", target.Name, e.Name))
+}
+
 // EntityInitialization builds the initialization of a new entity struct
 // pointer for the given entity
 func EntityInitialization(e *Entity) *Statement {
@@ -352,7 +376,7 @@ func EntityInitialization(e *Entity) *Statement {
 
 		for _, r := range e.Relations {
 			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+				d[Id(r.Alias())] = Op("&").Id(r.Entity).Values(Dict{
 					Id("ID"): Id(r.VarName()),
 				})
 			}
@@ -415,24 +439,21 @@ func (a *Attribute) VarName() string {
 // - hasOne
 //
 type Relation struct {
-	Alias     string
+	Name      string
+	Variable  string
 	Entity    string
 	Modifiers []string
 }
 
-// has a name, then return it, otherwise use the Entity name as the name
-// of the relation
-func (r *Relation) Name() string {
-	if r.Alias != "" {
-		return r.Alias
-	} else {
-		return r.Entity
-	}
+// Alias returns the name of the relation. If it has an alias,
+// then return it, otherwise use the Entity name as the name of the relation
+func (r *Relation) Alias() string {
+	return r.Name
 }
 
 // WithAlias defines the alias on the receiver relation
 func (r *Relation) WithAlias(name string) *Relation {
-	r.Alias = name
+	r.Name = name
 	return r
 }
 
@@ -448,10 +469,62 @@ func (r *Relation) WithModifiers(mods []string) *Relation {
 	return r
 }
 
-// VarName returns the variable name representation for the
-// relation
+// ResolveVariable defines the variable name to use when
+// referring to this relation in Golang code. If the relation
+// already defines a variable, then use that. Otherwise, check
+// if the referenced entity has a defined variable name.
+// Otherwise, use the relation entity name as the variable name
+func (r *Relation) ResolveVariable(m *Model) string {
+
+	// if the relation has a variable name defined,
+	// then use it
+	if len(r.Variable) > 0 {
+		return strings.ToLower(r.Variable)
+	}
+
+	// If the entity has a variable, then use it
+	// If the relation is one to many, then
+	// use a plural name
+	e := m.EntityForNameOrPanic(r.Entity)
+	if len(e.Variable) > 0 {
+		name := e.Variable
+		if r.HasModifier("hasMany") {
+			name = fmt.Sprintf("%ss", name)
+		}
+
+		return strings.ToLower(name)
+	}
+
+	// We use the entity as the default name
+	return strings.ToLower(r.Entity)
+}
+
+// ResolveAlias defines the name for a relation. It takes
+// into account the cardinality of the relation and the
+// referenced entity properties
+func (r *Relation) ResolveAlias(m *Model) string {
+
+	// if the relation has a name, then return it
+	if len(r.Name) > 0 {
+		return r.Name
+	}
+
+	e := m.EntityForNameOrPanic(r.Entity)
+
+	// if it is a hasMany, then use the entity
+	// plural
+	if r.HasModifier("hasMany") {
+		return e.PluralName()
+	}
+
+	return e.Name
+}
+
+// VarName returns the variable to be used in generated
+// code for this relation. This function relies on the
+// implementation provided by ResolveVariable
 func (r *Relation) VarName() string {
-	return fmt.Sprintf("%s", strings.ToLower(r.Name()))
+	return r.Variable
 }
 
 // HasModifier returns true, if the relation has the given modifier

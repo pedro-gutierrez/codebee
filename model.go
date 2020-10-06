@@ -42,7 +42,7 @@ func AddModelStruct(f *File, e *Entity) {
 		// Add a struct field for each relation. We we built a pointer
 		// type for each entity we point at
 		for _, r := range e.Relations {
-			g.Id(r.Name()).Op("*").Id(r.Entity)
+			g.Id(r.Alias()).Op("*").Id(r.Entity)
 		}
 	})
 }

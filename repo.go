@@ -205,12 +205,92 @@ func AddFindFuns(e *Entity, f *File) {
 			AddFindByRelationFun(e, r, f)
 		}
 	}
+
+	AddFindAllFun(e, f)
 }
 
 // FindEntityByAttributeFunName returns the name of the finder function for the given
 // entity and attribute
 func FindEntityByAttributeFunName(e *Entity, a *Attribute) string {
 	return fmt.Sprintf("Find%sBy%s", e.Name, a.Name)
+}
+
+// AddFindAllFun produces a finder function that returns instances
+// of the given entity
+func AddFindAllFun(e *Entity, f *File) {
+
+	// error handling code to be used in different points of this
+	// function body
+	ifErrReturn := If(Err().Op("!=").Nil()).Block(
+		Return(
+			Id(VarName(e.PluralName())),
+			Err(),
+		),
+	)
+
+	funName := FindAllFunName(e)
+	f.Comment(fmt.Sprintf("%s finds all instances of type %s. If no row matches, then this function returns an empty slice", funName, e.Name))
+	f.Func().Id(funName).Params(
+		Id("db").Op("*").Qual("database/sql", "DB"),
+		Id("limit").Int32(),
+		Id("offset").Int32(),
+	).Parens(List(
+		Op("[]").Op("*").Id(e.Name),
+		Error(),
+	)).BlockFunc(func(g *Group) {
+
+		g.Id(VarName(e.PluralName())).Op(":=").Op("[]").Op("*").Id(e.Name).Values(Dict{})
+
+		g.List(
+			Id("stmt"),
+			Err(),
+		).Op(":=").Id("db").Dot("Prepare").Call(
+			Qual("fmt", "Sprintf").Call(
+				Lit(fmt.Sprintf(
+					"%s ORDER BY %s ASC LIMIT %%v OFFSET %%v",
+					SelectAllStatement(e),
+					AttributeColumnName(e.PreferredSort()),
+				)),
+				Id("limit"),
+				Id("offset"),
+			),
+		)
+
+		g.Add(ifErrReturn)
+		DeferCall("stmt", "Close", g)
+
+		g.List(
+			Id("rows"),
+			Err(),
+		).Op(":=").Id("stmt").Dot("Query").Call()
+		g.Add(ifErrReturn)
+
+		DeferCall("rows", "Close", g)
+
+		g.For(
+			Id("rows").Dot("Next").Call(),
+		).BlockFunc(func(g2 *Group) {
+
+			g2.Add(EmptyStructForEntity(e))
+			g2.Err().Op(":=").Id("rows").Dot("Scan").Call(ListFunc(
+				ScanRowIntoEntityStruct(e),
+			))
+
+			g2.Add(ifErrReturn)
+			g2.Id(VarName(e.PluralName())).Op("=").Append(Id(VarName(e.PluralName())), Id(e.VarName()))
+		})
+
+		g.Return(List(
+			Id(VarName(e.PluralName())),
+			Nil(),
+		))
+	})
+}
+
+// FindAllFunName returns the name of the finder function for the given
+// entity
+func FindAllFunName(e *Entity) string {
+	return fmt.Sprintf("FindAll%s", e.PluralName())
 }
 
 // AddFindByAttributeFun produces a finder function for the given entity and
@@ -221,7 +301,7 @@ func AddFindByAttributeFun(e *Entity, a *Attribute, f *File) {
 	f.Func().Id(funName).Params(Id("db").Op("*").Qual("database/sql", "DB"), TypedFromAttribute(Id(a.VarName()), a)).Parens(List(Op("*").Id(e.Name), Error())).BlockFunc(func(g *Group) {
 
 		g.Add(EmptyStructForEntity(e))
-		PrepareDbStatement(SelectByColumnStatement(e, a), g)
+		PrepareDbStatement(SelectByColumnFromAttributeStatement(e, a), g)
 		IfErrorReturnWithEntity(e, g)
 		DeferCloseStatement(g)
 
@@ -238,7 +318,7 @@ func AddFindByAttributeFun(e *Entity, a *Attribute, f *File) {
 // FindEntityByRelationFunName returns the name of the finder function for the given
 // entity and relation
 func FindEntityByRelationFunName(e *Entity, r *Relation) string {
-	return fmt.Sprintf("Find%sBy%s", e.PluralName() , r.Name())
+	return fmt.Sprintf("Find%sBy%s", e.PluralName(), r.Alias())
 }
 
 // AddFindByRelationFun produces a finder function for the given entity
@@ -251,12 +331,12 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 	// function body
 	ifErrReturn := If(Err().Op("!=").Nil()).Block(
 		Return(
-			Id(VarName(e.PluralName() )),
+			Id(VarName(e.PluralName())),
 			Err(),
 		),
 	)
 
-	f.Comment(fmt.Sprintf("%s finds a list of instances of type %s by %s. If no rows match, then this function returns an empty slice. Results are sorted and paginated.", funName, e.Name, r.Name()))
+	f.Comment(fmt.Sprintf("%s finds a list of instances of type %s by %s. If no rows match, then this function returns an empty slice. Results are sorted and paginated.", funName, e.Name, r.Alias()))
 	f.Func().Id(funName).Params(
 		Id("db").Op("*").Qual("database/sql", "DB"),
 		Id(r.VarName()).String(),
@@ -266,7 +346,7 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 		Op("[]").Op("*").Id(e.Name),
 		Error(),
 	)).BlockFunc(func(g *Group) {
-		g.Id(VarName(e.PluralName() )).Op(":=").Op("[]").Op("*").Id(e.Name).Values(Dict{})
+		g.Id(VarName(e.PluralName())).Op(":=").Op("[]").Op("*").Id(e.Name).Values(Dict{})
 
 		g.List(
 			Id("stmt"),
@@ -275,9 +355,7 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 			Qual("fmt", "Sprintf").Call(
 				Lit(fmt.Sprintf(
 					"%s ORDER BY %s ASC LIMIT %%v OFFSET %%v",
-					SelectByColumnStatement(e, &Attribute{
-						Name: r.Name(),
-					}),
+					SelectByColumnFromRelationStatement(e, r),
 					AttributeColumnName(e.PreferredSort()),
 				)),
 				Id("limit"),
@@ -308,11 +386,11 @@ func AddFindByRelationFun(e *Entity, r *Relation, f *File) {
 			))
 
 			g2.Add(ifErrReturn)
-			g2.Id(VarName(e.PluralName() )).Op("=").Append(Id(VarName(e.PluralName() )), Id(e.VarName()))
+			g2.Id(VarName(e.PluralName())).Op("=").Append(Id(VarName(e.PluralName())), Id(e.VarName()))
 		})
 
 		g.Return(List(
-			Id(VarName(e.PluralName() )),
+			Id(VarName(e.PluralName())),
 			Nil(),
 		))
 	})
@@ -375,7 +453,7 @@ func InsertStatementValues(e *Entity, g *Group) {
 
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			g.Id(e.VarName()).Dot(r.Name()).Dot("ID")
+			g.Id(e.VarName()).Dot(r.Alias()).Dot("ID")
 		}
 	}
 }
@@ -385,12 +463,12 @@ func InsertStatementValues(e *Entity, g *Group) {
 // relation of the given entity
 func InsertStatementValuesForGeneratedRelation(e *Entity, r *Relation, e2 *Entity, g *Group) {
 	for _, a := range e2.Attributes {
-		g.Id(e.VarName()).Dot(r.Name()).Dot(a.Name)
+		g.Id(e.VarName()).Dot(r.Alias()).Dot(a.Name)
 	}
 
 	for _, r2 := range e2.Relations {
 		if r2.HasModifier("belongsTo") || r2.HasModifier("hasOne") {
-			g.Id(e.VarName()).Dot(r.Name()).Dot(r2.Name()).Dot("ID")
+			g.Id(e.VarName()).Dot(r.Alias()).Dot(r.Alias()).Dot("ID")
 		}
 	}
 }
@@ -438,7 +516,7 @@ func UpdateStatementValues(e *Entity, g *Group) {
 
 	for _, r := range e.Relations {
 		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-			g.Id(e.VarName()).Dot(r.Name()).Dot("ID")
+			g.Id(e.VarName()).Dot(r.Alias()).Dot("ID")
 		}
 	}
 
@@ -462,9 +540,46 @@ func DeleteStatementValues(e *Entity, g *Group) {
 	g.Id("id")
 }
 
-// SelectByColumnStatement generates a SELECT statement that performs a
-// query for an entity by a single column
-func SelectByColumnStatement(e *Entity, a *Attribute) string {
+// SelectByColumnFromAttributeStatement generates a SELECT statement that performs a
+// query for an entity by a single column. The column is inferred from the given attribute
+func SelectByColumnFromAttributeStatement(e *Entity, a *Attribute) string {
+	return SelectByColumnFromStatement(e, AttributeColumnName(a))
+}
+
+// SelectByColumnFromRelationStatement generates a SELECT statement that performs a
+// query for an entity by a single column. The column is inferred from the given attribute
+func SelectByColumnFromRelationStatement(e *Entity, r *Relation) string {
+	return SelectByColumnFromStatement(e, RelationColumnName(r))
+}
+
+// SelectAllStatement generates a SELECT statement that performs a
+// query for all rows in a given table.
+func SelectAllStatement(e *Entity) string {
+
+	chunks := []string{}
+	chunks = append(chunks, "SELECT")
+
+	columns := []string{}
+	for _, a := range e.Attributes {
+		columns = append(columns, AttributeColumnName(a))
+	}
+
+	for _, r := range e.Relations {
+		if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
+			columns = append(columns, RelationColumnName(r))
+		}
+	}
+
+	chunks = append(chunks, strings.Join(columns, ","))
+	chunks = append(chunks, "FROM")
+	chunks = append(chunks, TableName(e))
+	return strings.Join(chunks, " ")
+
+}
+
+// SelectByColumnFromStatement generates a SELECT statement that performs a
+// query for an entity by a single column. The column is inferred from the given attribute
+func SelectByColumnFromStatement(e *Entity, whereColumn string) string {
 	chunks := []string{}
 	chunks = append(chunks, "SELECT")
 
@@ -483,7 +598,7 @@ func SelectByColumnStatement(e *Entity, a *Attribute) string {
 	chunks = append(chunks, "FROM")
 	chunks = append(chunks, TableName(e))
 	chunks = append(chunks, "WHERE")
-	chunks = append(chunks, AttributeColumnName(a))
+	chunks = append(chunks, whereColumn)
 	chunks = append(chunks, "=")
 	chunks = append(chunks, "$1")
 	return strings.Join(chunks, " ")
@@ -499,7 +614,7 @@ func EmptyStructForEntity(e *Entity) *Statement {
 		// IDs to other tables are modelled as strings
 		for _, r := range e.Relations {
 			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{})
+				d[Id(r.Alias())] = Op("&").Id(r.Entity).Values(Dict{})
 			}
 		}
 
@@ -543,7 +658,7 @@ func ScanRowIntoEntityStruct(e *Entity) func(*Group) {
 		// IDs to other tables are modelled as strings
 		for _, r := range e.Relations {
 			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
-				g.Op("&").Id(e.VarName()).Dot(r.Name()).Dot("ID")
+				g.Op("&").Id(e.VarName()).Dot(r.Alias()).Dot("ID")
 			}
 		}
 	}
@@ -563,7 +678,7 @@ func ReturnRow(e *Entity, g *Group) {
 		for _, r := range e.Relations {
 			if r.HasModifier("belongsTo") || r.HasModifier("hasOne") {
 
-				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+				d[Id(r.Alias())] = Op("&").Id(r.Entity).Values(Dict{
 					Id("ID"): Id(r.VarName()),
 				})
 			}

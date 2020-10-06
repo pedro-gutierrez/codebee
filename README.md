@@ -14,13 +14,13 @@ chmod +x ./codebee
 
 ## Write a model
 
-See `betting.yml` to get an idea of what a model looks like
+See `examples/betting.yml` to get an idea of what a model looks like
 
 ## Generate
 
 ```
 mkdir -p ~/Projects/betting
-./codebee --db=postgres --model=betting.yml --output=~/Projects/betting
+./codebee --db=postgres --model=examples/betting.yml --output=~/Projects/betting
 ```
 
 If you omit the `db` option, then the app will be optimized for

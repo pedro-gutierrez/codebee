@@ -252,7 +252,7 @@ func AttributeColumnName(a *Attribute) string {
 // relation. The name of the relation is convereted to snake case
 // and we append the _id suffix.
 func RelationColumnName(r *Relation) string {
-	return fmt.Sprintf("%s_id", strings.ToLower(strcase.ToSnake(r.Name())))
+	return fmt.Sprintf("%s_id", strings.ToLower(strcase.ToSnake(r.Alias())))
 }
 
 // AttributeSqlType returns the SQL datatype for an attribute.

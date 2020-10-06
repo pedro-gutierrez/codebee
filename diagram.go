@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/iancoleman/strcase"
 	"io/ioutil"
 	"strings"
+
+	"github.com/iancoleman/strcase"
 )
 
 // CreateDiagram generates a Graphviz diagram, a visual representation
@@ -30,7 +31,7 @@ func DotDiagramFromModel(m *Model) *DotDiagram {
 		}
 
 		for _, r := range e.Relations {
-			if r.Name() != "ID" {
+			if r.Alias() != "ID" {
 				d.Links = append(d.Links, DotLinkFromRelation(e, r))
 			}
 		}
@@ -68,8 +69,8 @@ func DotNodeFromAttribute(a *Attribute) *DotNode {
 // relation
 func DotNodeFromRelation(r *Relation) *DotNode {
 	return &DotNode{
-		Name:  strcase.ToSnake(r.Name()),
-		Label: r.Name(),
+		Name:  strcase.ToSnake(r.Alias()),
+		Label: r.Alias(),
 		Shape: "ellipse",
 	}
 }
@@ -109,7 +110,7 @@ func DotLinkStyleFromRelation(r *Relation) string {
 // DotLinkLabelFromRelation defines the style to apply to a link,
 // according to the type of relation between two entities
 func DotLinkLabelFromRelation(r *Relation) string {
-	name := r.Name()
+	name := r.Alias()
 	if name == r.Entity {
 		if r.HasModifier("belongsTo") {
 			name = "Belongs to"

@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	. "github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
-	"strings"
 )
 
 func CreateResolver(p *Package) error {
@@ -13,7 +14,7 @@ func CreateResolver(p *Package) error {
 
 	for _, e := range p.Model.Entities {
 
-		AddTypeResolver(e, f)
+		AddTypeResolver(e, p.Model, f)
 
 		if e.SupportsOperation("create") {
 
@@ -42,6 +43,8 @@ func CreateResolver(p *Package) error {
 					AddFinderByRelationQueryResolverFun(e, r, f)
 				}
 			}
+
+			AddFinderForAllQueryResolverFun(e, f)
 		}
 	}
 
@@ -55,7 +58,7 @@ func AddResolverStruct(f *File) {
 	)
 }
 
-func AddTypeResolver(e *Entity, f *File) {
+func AddTypeResolver(e *Entity, m *Model, f *File) {
 
 	f.Type().Id(GraphqlResolverForEntity(e)).Struct(
 		Id("Db").Op("*").Qual("database/sql", "DB"),
@@ -67,7 +70,15 @@ func AddTypeResolver(e *Entity, f *File) {
 	}
 
 	for _, r := range e.Relations {
-		AddRelationResolver(e, r, f)
+		// The code to resolve a nested entity
+		// or a collection of nested entities is slightly
+		// different, so we need different implementations
+		// here
+		if r.HasModifier("hasMany") {
+			AddManyRelationResolver(e, r, m, f)
+		} else {
+			AddSimpleRelationResolver(e, r, m, f)
+		}
 	}
 }
 
@@ -85,16 +96,22 @@ func AddAttributeResolver(e *Entity, a *Attribute, f *File) {
 	})
 }
 
-// AddRelationResolver builds a resolver function for the given entity
-// and relation
-func AddRelationResolver(e *Entity, r *Relation, f *File) {
+// AddManyRelationResolver builds a resolver function for the
+// given entity and relation. This implementation is designed for
+// one to many relations
+func AddManyRelationResolver(e *Entity, r *Relation, m *Model, f *File) {
 
-	fun := GraphqlFinderQueryByID(&Entity{Name: r.Entity})
-	res := GraphqlResolverResult(fun)
+	// find the inverse relation in the referenced
+	// entity
+	child := m.EntityForNameOrPanic(r.Entity)
+	inverse := child.RelationForEntityOrPanic(e)
+
+	//fun := GraphqlFinderQueryByParent(child, inverse)
+	res := GraphqlResolverForRelation(r)
 	resolver := GraphqlResolverForEntity(e)
 	returnType := GraphqlResolverDataTypeFromRelation(r)
 
-	f.Func().Parens(Id("r").Op("*").Id(resolver)).Id(strings.Title(r.Name())).Params(
+	f.Func().Parens(Id("r").Op("*").Id(resolver)).Id(strings.Title(r.Alias())).Params(
 		Id("ctx").Qual("context", "Context"),
 	).Parens(List(
 		returnType,
@@ -104,15 +121,79 @@ func AddRelationResolver(e *Entity, r *Relation, f *File) {
 		TimeNow(g)
 
 		g.List(
-			Id(VarName(r.Entity)),
+			Id(r.Variable),
 			Err(),
-		).Op(":=").Id(fmt.Sprintf("Find%sByID", r.Entity)).Call(
+		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", child.PluralName(), inverse.Alias())).Call(
 			Id("r").Dot("Db"),
-			Id("r").Dot("Data").Dot(r.Name()).Dot("ID"),
+			Id("r").Dot("Data").Dot("ID"),
+			Lit(100),
+			Lit(0),
 		)
 
 		MaybeReturnWrappedErrorAndIncrementCounter(
-			fmt.Sprintf("Error finding %s by %s", r.Entity, r.Name()),
+			fmt.Sprintf("Error finding %s by %s", child.PluralName(), e.Name),
+			FindByRelationQueryErrorCounterName(child, inverse),
+			g,
+		)
+
+		g.Id("resolvers").Op(":=").Id(res).Values(Dict{})
+
+		g.For(
+			List(
+				Id("_"),
+				Id(child.VarName()),
+			).Op(":=").Range().Id(r.Variable),
+		).BlockFunc(func(g2 *Group) {
+
+			g2.Id("resolvers").Op("=").Append(
+				Id("resolvers"),
+				Op("&").Id(GraphqlResolverForEntity(child)).Values(Dict{
+					Id("Db"):   Id("r").Dot("Db"),
+					Id("Data"): Id(child.VarName()),
+				}),
+			)
+		})
+
+		ObserveDuration(FindByRelationQueryHistogramName(child, inverse), g)
+
+		g.Return(
+			Op("&").Add(Id("resolvers")),
+			Nil(),
+		)
+	})
+
+}
+
+// AddSimpleRelationResolver builds a resolver function for the given entity
+// and relation. This function assumes the relation is a simple one, ie
+// a hasOne or belongsTo, where the result is a single instance of
+// the target entity and can be fetched by id.
+func AddSimpleRelationResolver(e *Entity, r *Relation, m *Model, f *File) {
+
+	fun := GraphqlFinderQueryByID(&Entity{Name: r.Entity})
+	res := GraphqlResolverResult(fun)
+	resolver := GraphqlResolverForEntity(e)
+	returnType := GraphqlResolverDataTypeFromRelation(r)
+
+	f.Func().Parens(Id("r").Op("*").Id(resolver)).Id(strings.Title(r.Alias())).Params(
+		Id("ctx").Qual("context", "Context"),
+	).Parens(List(
+		returnType,
+		Error(),
+	)).BlockFunc(func(g *Group) {
+
+		TimeNow(g)
+
+		g.List(
+			Id(r.VarName()),
+			Err(),
+		).Op(":=").Id(fmt.Sprintf("Find%sByID", r.Entity)).Call(
+			Id("r").Dot("Db"),
+			Id("r").Dot("Data").Dot(r.Alias()).Dot("ID"),
+		)
+
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error finding %s by %s", r.Entity, "ID"),
 			FindByRelationQueryErrorCounterName(e, r),
 			g,
 		)
@@ -122,7 +203,7 @@ func AddRelationResolver(e *Entity, r *Relation, f *File) {
 		g.Return(
 			Op("&").Add(Id(res)).Values(Dict{
 				Id("Db"):   Id("r").Dot("Db"),
-				Id("Data"): Id(VarName(r.Entity)),
+				Id("Data"): Id(r.VarName()),
 			}),
 			Nil(),
 		)
@@ -206,9 +287,9 @@ func EntityStructFromArgsDictFunc(e *Entity) func(Dict) {
 
 		for _, r := range e.Relations {
 			if !r.HasModifier("generated") && (r.HasModifier("hasOne") || r.HasModifier("belongsTo")) {
-				d[Id(r.Name())] = Op("&").Id(r.Entity).Values(Dict{
+				d[Id(r.Alias())] = Op("&").Id(r.Entity).Values(Dict{
 					Id("ID"): CastFromGraphqlType(
-						Id("args").Dot(strings.Title(r.Name())),
+						Id("args").Dot(strings.Title(r.Alias())),
 						GraphqlInputFieldFromRelation(r),
 					),
 				})
@@ -294,6 +375,59 @@ func EntityRepoFun(e *Entity, mutation string) string {
 	)
 }
 
+// AddFinderForAllQueryResolverFun defines a resolver function for the given
+// entity.
+func AddFinderForAllQueryResolverFun(e *Entity, f *File) {
+	fun := GraphqlFinderQueryForAll(e)
+	res := GraphqlResolverResult(fun)
+
+	ResolverFun(fun, func(g *Group) {
+
+		TimeNow(g)
+
+		g.List(
+			Id(VarName(e.PluralName())),
+			Err(),
+		).Op(":=").Id(fmt.Sprintf("FindAll%s", e.PluralName())).Call(
+			Id("r").Dot("Db"),
+			Id("args").Dot("Limit"),
+			Id("args").Dot("Offset"),
+		)
+
+		MaybeReturnWrappedErrorAndIncrementCounter(
+			fmt.Sprintf("Error finding all %s ", e.PluralName()),
+			FindAllQueryErrorCounterName(e),
+			g,
+		)
+
+		g.Id("resolvers").Op(":=").Id(res).Values(Dict{})
+
+		g.For(
+			List(
+				Id("_"),
+				Id(e.VarName()),
+			).Op(":=").Range().Id(VarName(e.PluralName())),
+		).BlockFunc(func(g2 *Group) {
+
+			g2.Id("resolvers").Op("=").Append(
+				Id("resolvers"),
+				Op("&").Id(GraphqlResolverForEntity(e)).Values(Dict{
+					Id("Db"):   Id("r").Dot("Db"),
+					Id("Data"): Id(e.VarName()),
+				}),
+			)
+		})
+
+		ObserveDuration(FindAllQueryHistogramName(e), g)
+
+		g.Return(
+			Op("&").Id("resolvers"),
+			Nil(),
+		)
+
+	}, f)
+}
+
 // AddFinderByAttributeQueryResolverFun defines a resolver function for the given
 // indexed and
 // unique attribute of the given entity
@@ -343,12 +477,12 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 		TimeNow(g)
 
 		g.List(
-			Id(VarName(e.PluralName() )),
+			Id(VarName(e.PluralName())),
 			Err(),
-		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.PluralName() , r.Name())).Call(
+		).Op(":=").Id(fmt.Sprintf("Find%sBy%s", e.PluralName(), r.Alias())).Call(
 			Id("r").Dot("Db"),
 			CastFromGraphqlType(
-				Id("args").Dot(r.Name()),
+				Id("args").Dot(r.Alias()),
 				GraphqlInputFieldFromRelation(r),
 			),
 			Id("args").Dot("Limit"),
@@ -356,7 +490,7 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 		)
 
 		MaybeReturnWrappedErrorAndIncrementCounter(
-			fmt.Sprintf("Error finding %s by %s", e.Name, r.Name()),
+			fmt.Sprintf("Error finding %s by %s", e.Name, r.Alias()),
 			FindByRelationQueryErrorCounterName(e, r),
 			g,
 		)
@@ -367,7 +501,7 @@ func AddFinderByRelationQueryResolverFun(e *Entity, r *Relation, f *File) {
 			List(
 				Id("_"),
 				Id(e.VarName()),
-			).Op(":=").Range().Id(VarName(e.PluralName() )),
+			).Op(":=").Range().Id(VarName(e.PluralName())),
 		).BlockFunc(func(g2 *Group) {
 
 			g2.Id("resolvers").Op("=").Append(
@@ -408,7 +542,12 @@ func GraphqlResolverForEntity(e *Entity) string {
 // GraphqlResolverForRelation builds the resolver type
 // the given entity
 func GraphqlResolverForRelation(r *Relation) string {
-	return GraphqlResolverForType(r.Entity)
+	res := GraphqlResolverForType(r.Entity)
+	if r.HasModifier("hasMany") {
+		return fmt.Sprintf("[]*%s", res)
+	}
+
+	return res
 }
 
 // GraphqlResolverResult builds the resolver type of the return type of
@@ -667,7 +806,7 @@ func AddGeneratorForRelation(e *Entity, r *Relation, mutation string, g *Group) 
 	funName := fmt.Sprintf(
 		"Generate%s%sOn%s",
 		e.Name,
-		r.Name(),
+		r.Alias(),
 		strcase.ToCamel(mutation),
 	)
 
@@ -682,5 +821,5 @@ func AddGeneratorForRelation(e *Entity, r *Relation, mutation string, g *Group) 
 		g,
 	)
 
-	g.Id(e.VarName()).Dot(r.Name()).Op("=").Id(r.VarName())
+	g.Id(e.VarName()).Dot(r.Alias()).Op("=").Id(r.VarName())
 }
